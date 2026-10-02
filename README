@@ -1,0 +1,167 @@
+# Olist Delivery Risk
+
+Proyecto de ciencia de datos orientado a estimar el riesgo de retraso en las entregas de pedidos de Olist, utilizando información comercial y logística disponible al momento de aprobar la compra.
+
+**Estado:** en desarrollo. Actualmente se está preparando el entorno de trabajo y explorando los datos. Todavía no hay un modelo entrenado ni una aplicación desplegada.
+
+## Problema de negocio
+
+Los retrasos en las entregas pueden afectar la experiencia del cliente. Identificar anticipadamente los pedidos con mayor riesgo de demora permitiría orientar el seguimiento logístico y la comunicación preventiva.
+
+Este proyecto explora la siguiente pregunta:
+
+> ¿Podemos predecir si un pedido llegará después del día prometido utilizando únicamente información disponible al aprobar la compra?
+
+## Objetivo
+
+Desarrollar y evaluar un modelo de clasificación que estime el riesgo de entrega tardía de un pedido.
+
+La predicción busca apoyar la priorización del seguimiento logístico. Su impacto sobre los retrasos y la satisfacción del cliente requeriría una validación posterior en una operación real.
+
+## Alcance
+
+La primera versión se enfocará en:
+
+- Explorar la calidad de los datos y las relaciones entre las tablas.
+- Construir una tabla analítica con una fila por pedido.
+- Analizar factores asociados con entregas tardías.
+- Entrenar y comparar modelos de clasificación.
+- Evaluar la detección de retrasos y la generación de falsas alertas.
+- Desarrollar una demo en Streamlit.
+
+La recomendación de acciones para aumentar ventas y la predicción de cancelaciones quedan fuera del alcance inicial.
+
+## Datos
+
+Se utilizará el conjunto público [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce), con pedidos históricos de 2016 a 2018.
+
+| Archivo | Contenido |
+|---|---|
+| `olist_orders_dataset.csv` | Pedidos, estados y fechas |
+| `olist_order_items_dataset.csv` | Artículos, vendedores, precios y fletes |
+| `olist_customers_dataset.csv` | Identificadores y ubicación de clientes |
+| `olist_order_payments_dataset.csv` | Información de pagos |
+| `olist_order_reviews_dataset.csv` | Valoraciones y comentarios |
+| `olist_products_dataset.csv` | Categorías y características de productos |
+| `olist_sellers_dataset.csv` | Información de vendedores |
+| `olist_geolocation_dataset.csv` | Coordenadas asociadas a códigos postales |
+| `product_category_name_translation.csv` | Traducción de categorías al inglés |
+
+Los datos originales se descargarán desde la fuente y se almacenarán localmente en `data/raw/`. No se incluirán en este repositorio. Su uso está sujeto a las condiciones y la licencia indicadas en la fuente.
+
+## Definición de la predicción
+
+**Unidad de análisis:** un pedido.
+
+**Momento de predicción:** aprobación de la compra.
+
+**Variable objetivo:** `pedido_retrasado`.
+
+| Valor | Definición |
+|---|---|
+| `1` | La entrega ocurrió después del día estimado |
+| `0` | La entrega ocurrió el día estimado o antes |
+
+La comparación se realizará por día calendario, sin considerar la hora.
+
+Para la primera versión se utilizarán pedidos con estado entregado y fechas válidas de entrega real y estimada. Los pedidos sin información suficiente no se etiquetarán automáticamente como puntuales.
+
+Esta selección limita las conclusiones a pedidos con entrega observada.
+
+## Variables candidatas
+
+Se evaluarán características como:
+
+- Fecha de compra y de aprobación.
+- Ubicación del cliente y de los vendedores.
+- Categorías y cantidad de artículos.
+- Precio y valor del flete.
+- Peso y dimensiones de los productos.
+- Tipo de pago y número de cuotas.
+- Tiempo prometido para la entrega.
+- Distancia aproximada entre origen y destino.
+
+La disponibilidad de cada variable en el momento de predicción se revisará antes de incluirla. Los pedidos con múltiples artículos o vendedores requerirán reglas de agregación explícitas.
+
+La fecha real de entrega se utilizará para construir la variable objetivo, pero no como entrada del modelo. Tampoco se utilizarán reseñas posteriores del mismo pedido ni otros datos conocidos después del momento de predicción.
+
+## Metodología
+
+1. **Exploración y calidad:** revisar tipos de datos, faltantes, duplicados y coherencia de fechas.
+2. **Integración:** unir las tablas controlando sus relaciones para evitar multiplicar pedidos o importes.
+3. **Preparación:** construir la variable objetivo y las características predictoras.
+4. **División temporal:** separar periodos de entrenamiento, validación y prueba.
+5. **Modelado:** comparar una referencia sencilla con regresión logística y modelos de árboles.
+6. **Evaluación:** analizar métricas, umbrales de alerta y tipos de error.
+7. **Comunicación:** documentar resultados, limitaciones y funcionamiento de la demo.
+
+Las transformaciones que aprendan de los datos se ajustarán únicamente con el conjunto de entrenamiento. El conjunto de prueba se reservará para la evaluación final.
+
+## Evaluación
+
+Se utilizarán:
+
+- **Recall:** proporción de retrasos reales que el modelo detecta.
+- **Precision:** proporción de alertas que corresponden a retrasos reales.
+- **F1-score:** medida que combina precision y recall.
+- **PR-AUC:** resumen del comportamiento de precision y recall al variar el umbral.
+- **ROC-AUC:** capacidad de discriminación entre clases.
+- **Matriz de confusión:** detalle de aciertos y errores.
+
+El umbral de alerta se seleccionará con los datos de validación, considerando el equilibrio entre detectar retrasos y generar falsas alertas.
+
+También se revisará la calibración antes de interpretar los valores estimados como probabilidades de riesgo.
+
+## Estructura prevista
+
+| Ruta | Propósito |
+|---|---|
+| `data/raw/` | Datos originales locales, excluidos de Git |
+| `data/processed/` | Datos preparados locales, excluidos de Git |
+| `notebooks/` | Exploración, análisis y experimentos |
+| `src/` | Código reutilizable |
+| `app/` | Demo en Streamlit |
+| `reports/` | Gráficos y resultados |
+| `requirements.txt` | Dependencias del proyecto |
+| `.gitignore` | Reglas de exclusión de archivos |
+| `README.md` | Documentación principal |
+
+Las carpetas y archivos se incorporarán conforme avance el desarrollo.
+
+## Herramientas previstas
+
+- Python.
+- Pandas y NumPy.
+- Matplotlib y Seaborn.
+- Scikit-learn.
+- Jupyter en Visual Studio Code.
+- Streamlit.
+- Git y GitHub.
+
+Las versiones de las dependencias y las instrucciones de ejecución se documentarán al configurar el entorno.
+
+## Limitaciones
+
+- Los datos son históricos y corresponden al contexto brasileño.
+- No se dispone de información completa sobre clima, tránsito o capacidad operativa.
+- Entrenar con pedidos entregados introduce una selección que debe considerarse al interpretar los resultados.
+- Las asociaciones observadas no demuestran relaciones causales.
+- El desempeño con estos datos no garantiza resultados equivalentes en una operación actual.
+- El proyecto es un prototipo educativo y no está validado para uso en producción.
+
+## Próximos pasos
+
+- [ ] Configurar el entorno local y las dependencias.
+- [ ] Incorporar las reglas de exclusión de datos en `.gitignore`.
+- [ ] Explorar la tabla de pedidos.
+- [ ] Construir la tabla analítica.
+- [ ] Desarrollar el análisis exploratorio.
+- [ ] Entrenar y evaluar modelos.
+- [ ] Construir la demo.
+- [ ] Documentar resultados y conclusiones.
+
+## Autoría
+
+Desarrollo inicial: **María Camila Uribe Noreña**.
+
+Proyecto de aprendizaje y prototipado para su posterior presentación y discusión con el equipo.
