@@ -1,4 +1,10 @@
-"""Variables del baseline: solo información conocida al momento de la compra.
+"""Variables del baseline: solo información conocida en el momento de predicción.
+
+Momento de predicción (anchor):
+  - "aprobacion" (por defecto, alineado al README): cuando Olist aprueba el pago.
+    Se descartan los pedidos sin order_approved_at y se agrega como variable las
+    horas entre la compra y la aprobación.
+  - "compra": cuando el cliente compra. Más estricto: no usa order_approved_at.
 
 Se usan:
   - fecha de compra (mes, día de semana, hora)
@@ -8,11 +14,11 @@ Se usan:
   - geografía: estado del cliente y si algún vendedor está en otro estado
   - pago: tipo de pago principal y cantidad máxima de cuotas
 
-Se excluyen por fuga (ocurren después de la compra o dependen del resultado):
-  order_approved_at, order_delivered_carrier_date, order_delivered_customer_date,
-  order_status, reviews y cualquier duración calculada con esas fechas.
-  shipping_limit_date también queda afuera por precaución: no está claro si
-  se actualiza después de la compra.
+Se excluyen por fuga (ocurren después del momento de predicción o dependen del resultado):
+  order_delivered_carrier_date, order_delivered_customer_date, order_status,
+  reviews y cualquier duración calculada con esas fechas. Con anchor "compra"
+  también order_approved_at. shipping_limit_date queda afuera por precaución:
+  no está claro si se actualiza después de la compra.
 """
 
 import pandas as pd
@@ -20,6 +26,11 @@ import pandas as pd
 from src.target import TARGET_COL
 
 PURCHASE_COL = "order_purchase_timestamp"
+APPROVED_COL = "order_approved_at"
+PREDICTION_TIME_COL = "prediction_time"
+
+ANCHORS = {"aprobacion": APPROVED_COL, "compra": PURCHASE_COL}
+DEFAULT_ANCHOR = "aprobacion"
 
 NUMERIC_FEATURES = [
     "purchase_month",
@@ -36,16 +47,35 @@ NUMERIC_FEATURES = [
     "max_installments",
 ]
 CATEGORICAL_FEATURES = ["customer_state", "main_payment_type", "seller_other_state"]
-FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+APPROVAL_FEATURES = ["approval_hours"]
 
 LEAKY_COLUMNS = [
-    "order_approved_at",
     "order_delivered_carrier_date",
     "order_delivered_customer_date",
     "order_status",
     "shipping_limit_date",
     "review_score",
 ]
+
+
+def _check_anchor(anchor: str) -> None:
+    if anchor not in ANCHORS:
+        raise ValueError(f"anchor debe ser uno de {list(ANCHORS)}, no {anchor!r}")
+
+
+def numeric_features(anchor: str = DEFAULT_ANCHOR) -> list[str]:
+    _check_anchor(anchor)
+    return NUMERIC_FEATURES + (APPROVAL_FEATURES if anchor == "aprobacion" else [])
+
+
+def feature_columns(anchor: str = DEFAULT_ANCHOR) -> list[str]:
+    return numeric_features(anchor) + CATEGORICAL_FEATURES
+
+
+def leaky_columns(anchor: str = DEFAULT_ANCHOR) -> list[str]:
+    """Columnas que no pueden ser variables porque se conocen después del momento de predicción."""
+    _check_anchor(anchor)
+    return LEAKY_COLUMNS + ([APPROVED_COL] if anchor == "compra" else [])
 
 
 def _items_features(items: pd.DataFrame, products: pd.DataFrame, sellers: pd.DataFrame) -> pd.DataFrame:
@@ -85,22 +115,33 @@ def build_features(
     sellers: pd.DataFrame,
     customers: pd.DataFrame,
     payments: pd.DataFrame,
+    anchor: str = DEFAULT_ANCHOR,
 ) -> pd.DataFrame:
-    """Una fila por pedido con order_id, fecha de compra, FEATURES y el target (si está en orders)."""
+    """Una fila por pedido con order_id, prediction_time, las variables del anchor y el target.
+
+    Con anchor "aprobacion" se descartan los pedidos sin fecha de aprobación.
+    """
+    _check_anchor(anchor)
     purchase = pd.to_datetime(orders[PURCHASE_COL])
+    approved = pd.to_datetime(orders[APPROVED_COL])
     estimated = pd.to_datetime(orders["order_estimated_delivery_date"])
+    prediction_time = approved if anchor == "aprobacion" else purchase
 
     base = orders[["order_id", "customer_id"]].assign(
         **{
             PURCHASE_COL: purchase,
+            PREDICTION_TIME_COL: prediction_time,
             "purchase_month": purchase.dt.month,
             "purchase_dayofweek": purchase.dt.dayofweek,
             "purchase_hour": purchase.dt.hour,
             "promised_days": (estimated.dt.normalize() - purchase.dt.normalize()).dt.days,
         }
     )
+    if anchor == "aprobacion":
+        base = base.assign(approval_hours=(approved - purchase).dt.total_seconds() / 3600)
     if TARGET_COL in orders:
         base = base.assign(**{TARGET_COL: orders[TARGET_COL].to_numpy()})
+    base = base.loc[prediction_time.notna().to_numpy()]
 
     table = (
         base.merge(customers[["customer_id", "customer_state"]], on="customer_id", how="left")
@@ -117,4 +158,4 @@ def build_features(
     return table.assign(
         freight_ratio=table["total_freight"] / table["total_price"].where(table["total_price"] > 0),
         seller_other_state=seller_other_state,
-    ).drop(columns=["seller_states", "customer_id"])
+    ).drop(columns=["seller_states", "customer_id"]).reset_index(drop=True)

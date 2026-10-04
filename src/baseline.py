@@ -1,8 +1,9 @@
 """Baseline: regresión logística con validación temporal.
 
 Uso (desde la raíz del repo, con los CSV en data/raw):
-    python -m src.baseline
-    python -m src.baseline --test-fraction 0.2 --output reports/baseline_metrics.json
+    python -m src.baseline                      # predice al aprobar la compra (por defecto)
+    python -m src.baseline --anchor compra      # predice al momento de la compra
+    python -m src.baseline --anchor ambas       # corre las dos variantes para compararlas
 """
 
 import argparse
@@ -17,7 +18,15 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.data_loading import RAW_DIR, load_raw_tables
-from src.features import CATEGORICAL_FEATURES, FEATURES, NUMERIC_FEATURES, PURCHASE_COL, build_features
+from src.features import (
+    ANCHORS,
+    CATEGORICAL_FEATURES,
+    DEFAULT_ANCHOR,
+    PREDICTION_TIME_COL,
+    build_features,
+    feature_columns,
+    numeric_features,
+)
 from src.target import TARGET_COL, build_target
 from src.validation import DEFAULT_TEST_FRACTION, classification_metrics, temporal_cutoff, temporal_split
 
@@ -25,11 +34,11 @@ RANDOM_STATE = 42
 MAX_ITER = 2000
 
 
-def make_model() -> Pipeline:
+def make_model(anchor: str = DEFAULT_ANCHOR) -> Pipeline:
     """Imputación + escalado + one-hot + regresión logística balanceada (el retraso es minoritario)."""
     preprocess = ColumnTransformer(
         [
-            ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), NUMERIC_FEATURES),
+            ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), numeric_features(anchor)),
             (
                 "cat",
                 make_pipeline(
@@ -44,22 +53,32 @@ def make_model() -> Pipeline:
     return Pipeline([("preprocess", preprocess), ("model", classifier)])
 
 
-def build_model_table(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    return build_features(**{**tables, "orders": build_target(tables["orders"])})
+def build_model_table(tables: dict[str, pd.DataFrame], anchor: str = DEFAULT_ANCHOR) -> pd.DataFrame:
+    return build_features(**{**tables, "orders": build_target(tables["orders"])}, anchor=anchor)
 
 
-def run_baseline(tables: dict[str, pd.DataFrame], test_fraction: float = DEFAULT_TEST_FRACTION) -> dict:
-    table = build_model_table(tables)
+def run_baseline(
+    tables: dict[str, pd.DataFrame],
+    test_fraction: float = DEFAULT_TEST_FRACTION,
+    anchor: str = DEFAULT_ANCHOR,
+) -> dict:
+    table = build_model_table(tables, anchor)
     cutoff = temporal_cutoff(table, test_fraction)
     train, test = temporal_split(table, cutoff)
+    features = feature_columns(anchor)
 
-    model = make_model().fit(train[FEATURES], train[TARGET_COL])
-    scores = model.predict_proba(test[FEATURES])[:, 1]
+    model = make_model(anchor).fit(train[features], train[TARGET_COL])
+    scores = model.predict_proba(test[features])[:, 1]
+
+    def period(part: pd.DataFrame) -> list[str]:
+        return [str(part[PREDICTION_TIME_COL].min().date()), str(part[PREDICTION_TIME_COL].max().date())]
 
     return {
+        "anchor": anchor,
+        "features": features,
         "cutoff": str(cutoff.date()),
-        "train_period": [str(train[PURCHASE_COL].min().date()), str(train[PURCHASE_COL].max().date())],
-        "test_period": [str(test[PURCHASE_COL].min().date()), str(test[PURCHASE_COL].max().date())],
+        "train_period": period(train),
+        "test_period": period(test),
         "train_size": int(len(train)),
         "train_positive_rate": float(train[TARGET_COL].mean()),
         "late_rate_all_delivered": float(table[TARGET_COL].mean()),
@@ -74,13 +93,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-dir", type=Path, default=RAW_DIR)
     parser.add_argument("--test-fraction", type=float, default=DEFAULT_TEST_FRACTION)
-    parser.add_argument("--output", type=Path, default=Path("reports/baseline_metrics.json"))
+    parser.add_argument("--anchor", choices=[*ANCHORS, "ambas"], default=DEFAULT_ANCHOR)
+    parser.add_argument("--output-dir", type=Path, default=Path("reports"))
     args = parser.parse_args()
 
-    results = run_baseline(load_raw_tables(args.raw_dir), args.test_fraction)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps(results, indent=2, ensure_ascii=False))
+    tables = load_raw_tables(args.raw_dir)
+    anchors = list(ANCHORS) if args.anchor == "ambas" else [args.anchor]
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    for anchor in anchors:
+        results = run_baseline(tables, args.test_fraction, anchor)
+        output = args.output_dir / f"baseline_metrics_{anchor}.json"
+        output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(json.dumps(results, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

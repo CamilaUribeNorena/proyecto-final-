@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.baseline import run_baseline
 
@@ -19,6 +20,7 @@ def _synthetic_tables(seed: int = 0) -> dict[str, pd.DataFrame]:
             "customer_id": [f"c{i}" for i in range(N_ORDERS)],
             "order_status": "delivered",
             "order_purchase_timestamp": purchase,
+            "order_approved_at": purchase + pd.to_timedelta(rng.integers(0, 48, N_ORDERS), unit="h"),
             "order_estimated_delivery_date": purchase + pd.to_timedelta(promised, unit="D"),
             "order_delivered_customer_date": purchase + pd.to_timedelta(actual, unit="D") + pd.Timedelta(hours=12),
         }
@@ -49,9 +51,12 @@ def _synthetic_tables(seed: int = 0) -> dict[str, pd.DataFrame]:
             "sellers": sellers, "customers": customers, "payments": payments}
 
 
-def test_baseline_runs_end_to_end_and_reports_all_metrics():
-    results = run_baseline(_synthetic_tables(), test_fraction=0.25)
+@pytest.mark.parametrize("anchor", ["aprobacion", "compra"])
+def test_baseline_runs_end_to_end_and_reports_all_metrics(anchor):
+    results = run_baseline(_synthetic_tables(), test_fraction=0.25, anchor=anchor)
 
+    assert results["anchor"] == anchor
+    assert ("approval_hours" in results["features"]) == (anchor == "aprobacion")
     assert results["train_period"][1] < results["test_period"][0]
     metrics = results["test_metrics"]
     for key in ["confusion_matrix", "precision", "recall", "f1", "roc_auc", "pr_auc"]:

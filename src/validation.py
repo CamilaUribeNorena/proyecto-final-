@@ -1,7 +1,8 @@
 """Validación temporal: se entrena con el pasado y se evalúa con el futuro.
 
-Nunca se mezclan pedidos al azar: todo pedido de test fue comprado en o después
-de la fecha de corte, y todo pedido de train antes de esa fecha.
+Nunca se mezclan pedidos al azar. El orden lo da prediction_time (fecha de
+aprobación o de compra, según el anchor): todo pedido de test es de la fecha de
+corte en adelante, y todo pedido de train es anterior.
 """
 
 import pandas as pd
@@ -14,7 +15,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.features import PURCHASE_COL
+from src.features import PREDICTION_TIME_COL
 
 DEFAULT_TEST_FRACTION = 0.2
 DEFAULT_THRESHOLD = 0.5
@@ -22,12 +23,12 @@ DEFAULT_THRESHOLD = 0.5
 
 def temporal_cutoff(table: pd.DataFrame, test_fraction: float = DEFAULT_TEST_FRACTION) -> pd.Timestamp:
     """Fecha (día) a partir de la cual queda aproximadamente el último test_fraction de pedidos."""
-    return table[PURCHASE_COL].quantile(1 - test_fraction).normalize()
+    return table[PREDICTION_TIME_COL].quantile(1 - test_fraction).normalize()
 
 
 def temporal_split(table: pd.DataFrame, cutoff: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Train: compras antes del corte. Test: compras desde el corte en adelante."""
-    is_test = table[PURCHASE_COL] >= cutoff
+    """Train: pedidos antes del corte. Test: pedidos desde el corte en adelante."""
+    is_test = table[PREDICTION_TIME_COL] >= cutoff
     return table.loc[~is_test].copy(), table.loc[is_test].copy()
 
 

@@ -1,20 +1,20 @@
 import pandas as pd
 import pytest
 
-from src.features import PURCHASE_COL
+from src.features import PREDICTION_TIME_COL
 from src.validation import classification_metrics, temporal_cutoff, temporal_split
 
 
 def _table():
     dates = pd.date_range("2017-01-01", periods=10, freq="30D")
-    return pd.DataFrame({PURCHASE_COL: dates, "x": range(10)})
+    return pd.DataFrame({PREDICTION_TIME_COL: dates, "x": range(10)})
 
 
 def test_split_keeps_all_train_before_test():
     table = _table()
     train, test = temporal_split(table, temporal_cutoff(table, test_fraction=0.2))
     assert len(train) + len(test) == len(table)
-    assert train[PURCHASE_COL].max() < test[PURCHASE_COL].min()
+    assert train[PREDICTION_TIME_COL].max() < test[PREDICTION_TIME_COL].min()
 
 
 def test_cutoff_leaves_roughly_the_requested_fraction_in_test():
