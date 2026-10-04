@@ -10,6 +10,8 @@
 
 `order_estimated_delivery_date` siempre viene a las 00:00, pero `order_delivered_customer_date` trae la hora real. Si se comparan los timestamps completos, un pedido entregado **el mismo día prometido** (por ejemplo a las 15:00) cuenta como retrasado. Por eso aparecían dos tasas distintas en los chats del equipo (8,1 % y 6,8 %).
 
+Confirmado con los datos (96.470 pedidos entregados): por timestamp da 8,11 % y por día calendario 6,77 %.
+
 Decisión: comparamos solo la fecha (`.dt.normalize()`). Es retraso únicamente si llegó un día posterior al prometido, que es como lo vive el cliente. La comparación por timestamp queda disponible con `build_target(..., by_calendar_day=False)` y el script reporta las dos tasas (`late_rate_all_delivered` y `late_rate_timestamp_comparison`) para que quede trazable.
 
 ## Variables: solo lo que se conoce al comprar
