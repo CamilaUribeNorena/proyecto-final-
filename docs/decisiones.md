@@ -45,6 +45,7 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Estado:** Acordada.
 - **Decisión:** se entrena con pedidos más viejos y se evalúa con los más nuevos, ordenados por la fecha del momento de predicción. Nunca split aleatorio. Las transformaciones se ajustan solo con train.
 - **Métricas:** matriz de confusión, precision, recall, F1, ROC-AUC y PR-AUC. El umbral se elige con validación, no con test.
+- **Pendiente:** el baseline actual divide solo en train y test y reporta las métricas con umbral fijo 0,5 directo en test. Falta separar un conjunto de validación (entre train y test, también por fecha) para elegir el umbral ahí y dejar el test solo para la evaluación final.
 
 ## 6. Flujo de trabajo con Git
 
