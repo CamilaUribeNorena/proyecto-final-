@@ -14,15 +14,17 @@ Confirmado con los datos (96.470 pedidos entregados): por timestamp da 8,11 % y 
 
 Decisión: comparamos solo la fecha (`.dt.normalize()`). Es retraso únicamente si llegó un día posterior al prometido, que es como lo vive el cliente. La comparación por timestamp queda disponible con `build_target(..., by_calendar_day=False)` y el script reporta las dos tasas (`late_rate_all_delivered` y `late_rate_timestamp_comparison`) para que quede trazable.
 
-## Variables: solo lo que se conoce al comprar
+## Variables: solo lo que se conoce en el momento de predicción
+
+Por defecto se predice al aprobar la compra (ver `docs/decisiones.md`, punto 3); con `--anchor compra` se predice al comprar. En la variante aprobación se suma `approval_hours` y `order_approved_at` deja de ser fuga.
 
 Ver `src/features.py`. Se usan fecha de compra (mes, día de semana, hora), plazo prometido en días, carrito (ítems, vendedores, precio, flete, peso, volumen), estado del cliente, si algún vendedor está en otro estado y forma de pago.
 
-Quedan afuera por fuga de datos: `order_approved_at`, `order_delivered_carrier_date`, `order_delivered_customer_date`, `order_status`, reseñas y cualquier duración calculada con esas fechas. `shipping_limit_date` también queda afuera por precaución, porque no está claro si se actualiza después de la compra. Hay un test (`tests/test_features.py`) que falla si alguna de esas columnas entra como variable.
+Quedan afuera por fuga de datos: `order_delivered_carrier_date`, `order_delivered_customer_date`, `order_status`, reseñas y cualquier duración calculada con esas fechas (y `order_approved_at` en la variante compra). `shipping_limit_date` también queda afuera por precaución, porque no está claro si se actualiza después de la compra. Hay un test (`tests/test_features.py`) que falla si alguna de esas columnas entra como variable.
 
 ## Validación temporal
 
-- Se ordena por `order_purchase_timestamp`. Train = compras antes de la fecha de corte; test = compras desde esa fecha.
+- Se ordena por el momento de predicción (`order_approved_at` por defecto, `order_purchase_timestamp` en la variante compra). Train = pedidos antes de la fecha de corte; test = pedidos desde esa fecha.
 - Por defecto el corte deja aproximadamente el último 20 % de pedidos en test (`--test-fraction`).
 - Nunca se usa un split aleatorio: el modelo se evalúa sobre el "futuro", como pasaría en producción.
 - Ojo: los últimos meses del dataset tienen pocos pedidos entregados (los no entregados se excluyen), así que el test puede tener una tasa de retraso distinta a la de train. El script reporta ambas tasas.
@@ -37,8 +39,9 @@ Quedan afuera por fuga de datos: `order_approved_at`, `order_delivered_carrier_d
 ```bash
 pip install -r requirements.txt
 # CSV de Kaggle (olistbr/brazilian-ecommerce) descomprimidos en data/raw/
-python -m src.baseline
+python -m src.baseline                  # aprobación (por defecto)
+python -m src.baseline --anchor ambas   # compara aprobación y compra
 python -m pytest
 ```
 
-El resultado queda en `reports/baseline_metrics.json` (ignorado por Git).
+Los resultados quedan en `reports/baseline_metrics_<anchor>.json` (ignorados por Git).
