@@ -1,0 +1,34 @@
+# --- Datos: nunca se versionan (se descargan de Kaggle a data/raw) ---
+# Solo se suben los .gitkeep que mantienen la estructura de carpetas.
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# Archivos de datos y documentos sueltos, en cualquier carpeta
+*.csv
+*.zip
+*.parquet
+*.xlsx
+*.pdf
+*.docx
+
+# --- Salidas generadas ---
+reports/*.json
+models/
+
+# --- Python / Jupyter ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- Entorno local y herramientas personales ---
+.env
+.vscode/
+.idea/
+.claude/
+.agents/
+.DS_Store
+Thumbs.db
