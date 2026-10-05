@@ -191,7 +191,8 @@ El detalle y las decisiones del equipo están en [`docs/decisiones.md`](docs/dec
 - [x] Configurar el entorno local y las dependencias.
 - [x] Incorporar las reglas de exclusión de datos en `.gitignore`.
 - [ ] Explorar la tabla de pedidos.
-- [ ] Construir la tabla analítica.
+- [x] Construir la tabla analítica (`src/features.py`, una fila por pedido).
+- [x] Baseline entrenado y evaluado (regresión logística con validación temporal, `src/baseline.py`).
 - [ ] Desarrollar el análisis exploratorio.
 - [ ] Entrenar y evaluar modelos.
 - [ ] Construir la demo.
