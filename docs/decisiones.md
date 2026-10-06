@@ -19,6 +19,7 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Decisión:** 1 si `order_delivered_customer_date` cae en un día posterior a `order_estimated_delivery_date`. Solo pedidos con estado `delivered` y ambas fechas presentes.
 - **Por qué:** la fecha estimada viene siempre a las 00:00. Comparando con la hora, un pedido entregado el mismo día prometido cuenta como tarde. Con los datos de Kaggle: 8,11 % comparando timestamps contra 6,77 % por día calendario (96.470 pedidos entregados). Usamos 6,77 %.
 - **Implementación:** una sola función reutilizable en `src/`. Nadie recalcula el target en un notebook.
+- **Actualización (2026-10-05):** con el período de estudio de la decisión 8, la población queda en 96.203 pedidos y la tasa en 6,79 %. En el código la columna se llama `pedido_retrasado` (antes `is_late`).
 
 ## 3. Momento de predicción: al aprobar la compra
 
@@ -61,3 +62,15 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Estado:** Acordada.
 - Los CSV de Kaggle se descargan a `data/raw/` y no se suben. El `.gitignore` ignora todo `data/` (salvo los `.gitkeep`), y además `*.csv`, `*.zip`, `*.pdf`, `*.docx` y `*.xlsx` en cualquier carpeta, para que nadie suba datos o documentos personales por error.
 - Antes de cada commit: revisar `git status` y no usar `git add .` sin mirar.
+
+## 8. Período de estudio: compras de enero 2017 a agosto 2018
+
+- **Estado:** Acordada (5 oct, chat del equipo).
+- **Decisión:** entran solo los pedidos comprados desde el 1 de enero de 2017 hasta el 31 de agosto de 2018. Con el target de la decisión 2 quedan **96.203 pedidos y 6,79 % de retrasos**.
+- **Por qué se excluye 2016:** son 267 pedidos entregados, con meses casi vacíos. No representan la operación.
+- **Por qué se corta en agosto 2018 (sesgo de censura):** los datos terminan el 17 de octubre de 2018. Un pedido que todavía no llegó a esa fecha no se puede etiquetar, y si los que faltan son justamente los demorados, la tasa del final parece más baja de lo que es.
+  - Septiembre y octubre de 2018 tienen 20 pedidos y ninguno se entregó: se excluyen.
+  - A una compra del 31 de agosto le quedan 47 días hasta el corte, y el 99 % de los pedidos se entrega en 46 días o menos. Solo el 0,8 % tarda más.
+  - Julio y agosto de 2018 tienen la misma proporción de pedidos entregados que los meses anteriores (97–98 %).
+  - Conclusión: el sesgo de censura en julio y agosto es menor a un punto porcentual. La tasa baja de esos meses (3,4 % y 6,2 %) es real, no un efecto del corte.
+- **Implementación:** `PERIOD_START` y `PERIOD_END` en `src/target.py`. `build_target` filtra el período por defecto; con `only_study_period=False` se ven todos los pedidos, solo para comparar.
