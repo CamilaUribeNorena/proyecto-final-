@@ -47,6 +47,7 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Decisión:** se entrena con pedidos más viejos y se evalúa con los más nuevos, ordenados por la fecha del momento de predicción. Nunca split aleatorio. Las transformaciones se ajustan solo con train.
 - **Métricas:** matriz de confusión, precision, recall, F1, ROC-AUC y PR-AUC. El umbral se elige con validación, no con test.
 - **Pendiente:** el baseline actual divide solo en train y test y reporta las métricas con umbral fijo 0,5 directo en test. Falta separar un conjunto de validación (entre train y test, también por fecha) para elegir el umbral ahí y dejar el test solo para la evaluación final.
+- **Actualización (2026-10-06):** `temporal_three_way_split` en `src/validation.py` separa train, validación y test por fecha. Se usa en `src/umbral.py` (decisión 9). Queda pendiente la validación cruzada temporal con varios cortes.
 
 ## 6. Flujo de trabajo con Git
 
@@ -74,3 +75,23 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
   - Julio y agosto de 2018 tienen la misma proporción de pedidos entregados que los meses anteriores (97–98 %).
   - Conclusión: el sesgo de censura en julio y agosto es menor a un punto porcentual. La tasa baja de esos meses (3,4 % y 6,2 %) es real, no un efecto del corte.
 - **Implementación:** `PERIOD_START` y `PERIOD_END` en `src/target.py`. `build_target` filtra el período por defecto; con `only_study_period=False` se ven todos los pedidos, solo para comparar.
+
+## 9. Calibración y niveles de riesgo
+
+- **Estado:** Propuesta (tarea 3). Se ratifica en el daily.
+- **Problema:** el baseline entrena con `class_weight="balanced"`. Ordena bien los pedidos (ROC-AUC 0,73 en validación), pero sus probabilidades están infladas: predice 48,6 % de riesgo medio cuando la tasa real de validación es 6,8 %. Con el umbral fijo de 0,5 alerta sobre casi la mitad de los pedidos.
+- **Decisión:**
+  1. **Tres cohortes por fecha:** train (ene 2017 a mar 2018), validación (mar a may 2018) y test (fines de may a ago 2018). Calibración, cortes y umbral se eligen en validación; el test se usa una sola vez.
+  2. **Recalibración de Platt** ajustada en validación. En validación el riesgo medio queda en 6,8 % (igual a la tasa real). En test predice 7,1 % frente a 3,5 % real, porque la prevalencia cae a la mitad: ninguna calibración fija aguanta un cambio así.
+  3. **Niveles de riesgo por volumen de pedidos, no por probabilidad:** alto = 5 % de pedidos con más riesgo, medio = 15 % siguiente, bajo = el resto. Los cortes se fijan en validación y se aplican sin cambios. Así el volumen de alertas es estable aunque cambie la prevalencia.
+  4. **Umbral por costos** (1 / (1 + r), con r = costo de un falso negativo / costo de un falso positivo) solo como análisis de sensibilidad con r = 5, 10 y 20, no como regla única.
+- **Resultado en test:**
+
+| Nivel | % de pedidos | Tasa de retraso | % de los retrasos | Lift |
+|---|---|---|---|---|
+| Alto | 6,2 % | 8,7 % | 15,5 % | 2,49 |
+| Medio | 15,4 % | 5,0 % | 22,0 % | 1,43 |
+| Bajo | 78,4 % | 2,8 % | 62,6 % | 0,80 |
+
+- **Por qué:** con la prevalencia mensual entre 1,2 % y 19 % (EDA), un umbral fijo dispara cantidades muy distintas de alertas según el mes. Logística necesita saber cuántos pedidos va a revisar.
+- **Implementación:** `src/calibration.py` y `src/umbral.py` (`python -m src.umbral` escribe `reports/umbral_calibracion.json`). Pruebas en `tests/test_calibration.py`. Se vuelve a aplicar sin cambios al modelo principal del Sprint 2.
