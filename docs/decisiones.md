@@ -74,3 +74,11 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
   - Julio y agosto de 2018 tienen la misma proporción de pedidos entregados que los meses anteriores (97–98 %).
   - Conclusión: el sesgo de censura en julio y agosto es menor a un punto porcentual. La tasa baja de esos meses (3,4 % y 6,2 %) es real, no un efecto del corte.
 - **Implementación:** `PERIOD_START` y `PERIOD_END` en `src/target.py`. `build_target` filtra el período por defecto; con `only_study_period=False` se ven todos los pedidos, solo para comparar.
+
+## 10. Modelo principal: regresión logística con selección de features
+
+- **Estado:** Propuesta (parte 2). Se ratifica en el daily.
+- **Decisión:** el modelo principal es una regresión logística balanceada con las variables del baseline sin `purchase_month`, más la distancia cliente-vendedor (`max_distance_km`). Se elige con validación cruzada temporal de 4 tramos sobre train + validación, por PR-AUC medio, y ante un empate (menos de 0,01) gana el modelo más simple.
+- **Resultado en test:** ROC-AUC 0,709 y PR-AUC 0,076, contra 0,700 y 0,072 del baseline.
+- **Por qué no árboles:** empatan en la validación cruzada pero en test caen a ROC-AUC 0,58, porque Olist acortó los plazos prometidos y los árboles no extrapolan ese cambio.
+- **Implementación:** `src/feature_engineering.py` (features de ruta, producto e historial del vendedor, extensible con `FEATURE_BUILDERS`) y `src/training.py` (`python -m src.training`). Detalle y tabla completa en `docs/decisiones_modelos.md`.
