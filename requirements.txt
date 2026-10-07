@@ -6,3 +6,4 @@ seaborn>=0.12
 streamlit>=1.30
 jupyter>=1.0
 pytest>=7.0
+joblib>=1.3
