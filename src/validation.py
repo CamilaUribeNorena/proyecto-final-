@@ -18,6 +18,7 @@ from sklearn.metrics import (
 from src.features import PREDICTION_TIME_COL
 
 DEFAULT_TEST_FRACTION = 0.2
+DEFAULT_VALIDATION_FRACTION = 0.2
 DEFAULT_THRESHOLD = 0.5
 
 
@@ -30,6 +31,23 @@ def temporal_split(table: pd.DataFrame, cutoff: pd.Timestamp) -> tuple[pd.DataFr
     """Train: pedidos antes del corte. Test: pedidos desde el corte en adelante."""
     is_test = table[PREDICTION_TIME_COL] >= cutoff
     return table.loc[~is_test].copy(), table.loc[is_test].copy()
+
+
+def temporal_three_way_split(
+    table: pd.DataFrame,
+    test_fraction: float = DEFAULT_TEST_FRACTION,
+    validation_fraction: float = DEFAULT_VALIDATION_FRACTION,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Train, validación y test, en ese orden en el tiempo.
+
+    El test es el último test_fraction de los pedidos. La validación es el último
+    validation_fraction de lo que queda antes del test. Se entrena con train, se
+    elige calibración, umbral y niveles de riesgo con validación, y el test se usa
+    una sola vez para reportar.
+    """
+    train_val, test = temporal_split(table, temporal_cutoff(table, test_fraction))
+    train, validation = temporal_split(train_val, temporal_cutoff(train_val, validation_fraction))
+    return train, validation, test
 
 
 def classification_metrics(y_true, y_score, threshold: float = DEFAULT_THRESHOLD) -> dict:
