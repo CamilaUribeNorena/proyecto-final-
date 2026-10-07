@@ -27,10 +27,10 @@ El historial del vendedor es la única feature que mira otros pedidos. Para que 
 
 ## Esquema de validación
 
-1. **Tres cohortes por fecha**, igual que `src/umbral.py` (decisión 9): train (ene 2017 a mar 2018, 61.276 pedidos, 7,8 % de retrasos), validación (mar a may 2018, 15.620, 6,8 %) y test (fines de may a ago 2018, 19.293, 3,5 %).
+1. **Tres cohortes por fecha** con `temporal_three_way_split` de `src/validation.py`, las mismas que usa `src/umbral.py` (decisión 9): train (ene 2017 a mar 2018, 61.276 pedidos, 7,8 % de retrasos), validación (mar a may 2018, 15.620, 6,8 %) y test (fines de may a ago 2018, 19.293, 3,5 %).
 2. **Elección del modelo:** validación cruzada temporal con 4 tramos sobre train + validación. Cada tramo se predice con un modelo entrenado solo con lo anterior. Gana el mejor PR-AUC medio; si otro candidato más simple queda a menos de 0,01, gana el simple.
 3. **Umbral de alerta para comparar:** el 5 % de pedidos con más riesgo en validación (como el nivel "alto" de la decisión 9). El umbral y la calibración definitivos son de la parte 3.
-4. **Test:** se mira una sola vez, con el modelo y el umbral ya elegidos.
+4. **Test:** se calcula recién con el modelo y el umbral ya elegidos. Se informa para los 4 candidatos como diagnóstico; no cambia la elección.
 
 ## Resultados
 
@@ -55,5 +55,5 @@ La regla de empate ya favorecía a la logística antes de mirar el test; el test
 
 - **Parte 3:** aplicar la calibración y los niveles de riesgo de `src/umbral.py` al modelo principal (`models/modelo_principal.joblib` trae el pipeline, las columnas y el umbral del 5 %).
 - **Mathias:** sumar sus features del EDA como builders nuevos. `dias_prometidos`, `mes_compra` y `dia_semana_compra` ya existen (`promised_days`, `purchase_month`, `purchase_dayofweek`). Ideas que todavía no están: tiempo histórico de la ruta estado-estado, carga del vendedor en los últimos días, feriados y fin de mes.
-- Cuando entre el PR de umbral y calibración, reemplazar `three_way_split` de `src/training.py` por `temporal_three_way_split` de `src/validation.py`, que hace lo mismo.
-- Distancias extremas (hasta 8.700 km) por coordenadas malas en el geolocation: no cambian el resultado, pero conviene recortarlas a Brasil.
+- **Reentrenar con train + validación** antes de la demo. Hoy el modelo guardado se entrena solo con train, para que la calibración y los cortes de la parte 3 se ajusten en validación sin sesgo. Una vez fijados, conviene reentrenar con todo lo anterior al test.
+- **Recortar distancias extremas:** llegan a 8.700 km por coordenadas malas en el geolocation. No cambian el resultado, pero conviene limitar las coordenadas a Brasil.
