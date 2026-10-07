@@ -78,22 +78,55 @@ def leaky_columns(anchor: str = DEFAULT_ANCHOR) -> list[str]:
     return LEAKY_COLUMNS + ([APPROVED_COL] if anchor == "compra" else [])
 
 
-def _items_features(items: pd.DataFrame, products: pd.DataFrame, sellers: pd.DataFrame) -> pd.DataFrame:
+def _items_features(
+    items: pd.DataFrame,
+    products: pd.DataFrame,
+    sellers: pd.DataFrame,
+) -> pd.DataFrame:
     enriched = (
         items.merge(products, on="product_id", how="left")
-        .merge(sellers[["seller_id", "seller_state"]], on="seller_id", how="left")
-        .assign(
-            volume_cm3=lambda d: d["product_length_cm"] * d["product_height_cm"] * d["product_width_cm"]
+        .merge(
+            sellers[["seller_id", "seller_state"]],
+            on="seller_id",
+            how="left",
         )
     )
+
+    physical_columns = [
+        "product_weight_g",
+        "product_length_cm",
+        "product_height_cm",
+        "product_width_cm",
+    ]
+
+    # Los valores físicos iguales o menores que cero no son válidos.
+    # Se conservan como faltantes para que el pipeline los impute.
+    enriched[physical_columns] = enriched[physical_columns].mask(
+        enriched[physical_columns] <= 0
+    )
+
+    enriched = enriched.assign(
+        volume_cm3=lambda d: (
+            d["product_length_cm"]
+            * d["product_height_cm"]
+            * d["product_width_cm"]
+        )
+    )
+
     return enriched.groupby("order_id").agg(
         n_items=("order_item_id", "count"),
         n_sellers=("seller_id", "nunique"),
         total_price=("price", "sum"),
         total_freight=("freight_value", "sum"),
-        total_weight_g=("product_weight_g", "sum"),
-        total_volume_cm3=("volume_cm3", "sum"),
-        seller_states=("seller_state", lambda s: frozenset(s.dropna())),
+        total_weight_g=(
+            "product_weight_g",
+            lambda values: values.sum(min_count=len(values)),
+        ),
+        total_volume_cm3=(
+            "volume_cm3",
+            lambda values: values.sum(min_count=len(values)),
+        ),
+        seller_states=("seller_state", lambda values: frozenset(values.dropna())),
     )
 
 
@@ -104,7 +137,19 @@ def _payments_features(payments: pd.DataFrame) -> pd.DataFrame:
         .set_index("order_id")["payment_type"]
         .rename("main_payment_type")
     )
-    installments = payments.groupby("order_id")["payment_installments"].max().rename("max_installments")
+
+    valid_installments = payments.assign(
+        payment_installments=payments["payment_installments"].mask(
+            payments["payment_installments"] <= 0
+        )
+    )
+
+    installments = (
+        valid_installments.groupby("order_id")["payment_installments"]
+        .max()
+        .rename("max_installments")
+    )
+
     return pd.concat([main_type, installments], axis=1)
 
 

@@ -82,3 +82,27 @@ def test_promised_days_counts_calendar_days_from_purchase(raw_tables):
 
 def test_seller_in_same_state_is_flagged_false(raw_tables):
     assert _features(raw_tables).loc["o2", "seller_other_state"] == "False"
+
+
+def test_invalid_product_measurements_remain_missing(raw_tables):
+    """Un cero físico no debe convertirse en un peso o volumen válido."""
+    products = raw_tables["products"].copy()
+    products.loc[products["product_id"] == "p1", "product_weight_g"] = 0
+    products.loc[products["product_id"] == "p1", "product_length_cm"] = 0
+
+    result = _features({**raw_tables, "products": products})
+
+    # o1 tiene p1 y p2. Si un ítem no tiene una medida válida, no inventamos
+    # un total parcial para todo el pedido: el pipeline lo imputará después.
+    assert pd.isna(result.loc["o1", "total_weight_g"])
+    assert pd.isna(result.loc["o1", "total_volume_cm3"])
+
+
+def test_nonpositive_installments_remain_missing(raw_tables):
+    """Cero cuotas es una anomalía del origen, no una financiación válida."""
+    payments = raw_tables["payments"].copy()
+    payments.loc[payments["order_id"] == "o2", "payment_installments"] = 0
+
+    result = _features({**raw_tables, "payments": payments})
+
+    assert pd.isna(result.loc["o2", "max_installments"])
