@@ -95,3 +95,11 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 
 - **Por qué:** con la prevalencia mensual entre 1,2 % y 19 % (EDA), un umbral fijo dispara cantidades muy distintas de alertas según el mes. Logística necesita saber cuántos pedidos va a revisar.
 - **Implementación:** `src/calibration.py` y `src/umbral.py` (`python -m src.umbral` escribe `reports/umbral_calibracion.json`). Pruebas en `tests/test_calibration.py`. Se vuelve a aplicar sin cambios al modelo principal del Sprint 2.
+
+## 10. Modelo principal: regresión logística con selección de features
+
+- **Estado:** Propuesta (parte 2). Se ratifica en el daily.
+- **Decisión:** el modelo principal es una regresión logística balanceada con las variables del baseline sin `purchase_month`, más la distancia cliente-vendedor (`max_distance_km`). Se elige con validación cruzada temporal de 4 tramos sobre train + validación, por PR-AUC medio, y ante un empate (menos de 0,01) gana el modelo más simple.
+- **Resultado en test:** ROC-AUC 0,709 y PR-AUC 0,076, contra 0,700 y 0,072 del baseline.
+- **Por qué no árboles:** empatan en la validación cruzada pero en test caen a ROC-AUC 0,58, porque Olist acortó los plazos prometidos y los árboles no extrapolan ese cambio.
+- **Implementación:** `src/feature_engineering.py` (features de ruta, producto e historial del vendedor, extensible con `FEATURE_BUILDERS`) y `src/training.py` (`python -m src.training`). Detalle y tabla completa en `docs/decisiones_modelos.md`.

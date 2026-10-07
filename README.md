@@ -163,6 +163,9 @@ pip install -r requirements.txt
 
 # 4. Verificar que todo funciona
 python -m pytest
+
+# 5. Entrenar y comparar modelos (escribe reports/comparacion_modelos.json)
+python -m src.training
 ```
 
 Los notebooks se abren con Jupyter desde la raíz del repo (`jupyter notebook`) o desde Visual Studio Code.
@@ -194,7 +197,7 @@ El detalle y las decisiones del equipo están en [`docs/decisiones.md`](docs/dec
 - [x] Construir la tabla analítica (`src/features.py`, una fila por pedido).
 - [x] Baseline entrenado y evaluado (regresión logística con validación temporal, `src/baseline.py`).
 - [ ] Desarrollar el análisis exploratorio.
-- [ ] Entrenar y evaluar modelos.
+- [x] Entrenar y evaluar modelos (`src/training.py`, ver `docs/decisiones_modelos.md`).
 - [ ] Construir la demo.
 - [ ] Documentar resultados y conclusiones.
 
