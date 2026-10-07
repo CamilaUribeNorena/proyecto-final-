@@ -93,8 +93,17 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 | Medio | 15,4 % | 5,0 % | 22,0 % | 1,43 |
 | Bajo | 78,4 % | 2,8 % | 62,6 % | 0,80 |
 
+- **Aplicado al modelo principal (decisión 10), en test:** riesgo medio calibrado 8,2 % frente a 3,5 % real (en validación 6,8 % = tasa real).
+
+| Nivel | % de pedidos | Tasa de retraso | % de los retrasos | Lift |
+|---|---|---|---|---|
+| Alto | 8,7 % | 8,1 % | 20,1 % | 2,32 |
+| Medio | 18,5 % | 5,4 % | 28,8 % | 1,56 |
+| Bajo | 72,9 % | 2,4 % | 51,1 % | 0,70 |
+
+  En test el nivel alto cubre 8,7 % de pedidos y no 5 %: con los cortes fijos de validación, el modelo principal sube los puntajes de los meses nuevos. El volumen de alertas se mueve menos que con un umbral fijo, pero hay que vigilarlo en producción.
 - **Por qué:** con la prevalencia mensual entre 1,2 % y 19 % (EDA), un umbral fijo dispara cantidades muy distintas de alertas según el mes. Logística necesita saber cuántos pedidos va a revisar.
-- **Implementación:** `src/calibration.py` y `src/umbral.py` (`python -m src.umbral` escribe `reports/umbral_calibracion.json`). Pruebas en `tests/test_calibration.py`. Se vuelve a aplicar sin cambios al modelo principal del Sprint 2.
+- **Implementación:** `src/calibration.py` y `src/umbral.py` `python -m src.umbral` aplica la calibración al modelo principal, escribe `reports/umbral_calibracion_principal.json` y guarda el artefacto calibrado (modelo, features, calibrador y cortes) en `models/modelo_principal_calibrado.joblib`, que es el que servirá la API. `python -m src.umbral --modelo baseline` reproduce la tabla del baseline. `predict_risk(artefacto, pedidos)` devuelve `prob_retraso` y `nivel_riesgo`. Pruebas en `tests/test_calibration.py`.
 
 ## 10. Modelo principal: regresión logística con selección de features
 
