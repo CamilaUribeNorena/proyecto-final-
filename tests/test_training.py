@@ -12,8 +12,8 @@ from src.training import (
     select_model,
     selected_feature_lists,
     temporal_cv_folds,
-    three_way_split,
 )
+from src.validation import temporal_three_way_split
 
 N_ORDERS = 1500
 
@@ -37,8 +37,8 @@ def dataset(monkeypatch):
     return build_model_dataset(tables)
 
 
-def test_three_way_split_is_ordered_in_time(dataset):
-    train, validation, test = three_way_split(dataset)
+def test_temporal_three_way_split_is_ordered_in_time(dataset):
+    train, validation, test = temporal_three_way_split(dataset)
     assert len(train) + len(validation) + len(test) == len(dataset)
     assert train[PREDICTION_TIME_COL].max() < validation[PREDICTION_TIME_COL].min()
     assert validation[PREDICTION_TIME_COL].max() < test[PREDICTION_TIME_COL].min()

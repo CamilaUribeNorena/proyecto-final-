@@ -4,7 +4,8 @@ Uso (desde la raíz del repo, con los 9 CSV de Kaggle en data/raw):
     python -m src.training
     python -m src.training --anchor compra
 
-Compara, con el mismo split temporal en tres cohortes:
+Compara, con las tres cohortes por fecha de src/validation.py::temporal_three_way_split
+(las mismas que src/umbral.py):
   - logistica_baseline: el baseline tal cual (features de src/features.py), referencia
   - logistica_seleccion: regresión logística con la selección de features
   - arboles_seleccion: HistGradientBoosting (árboles con boosting) con la selección
@@ -17,8 +18,9 @@ aprende meses que no se repiten.
 
 El modelo se elige por PR-AUC medio en una validación cruzada temporal (4 tramos)
 sobre train + validación; ante un empate (menos de 0,01) gana el más simple. El
-umbral de alerta se fija en validación (5 % de pedidos con más riesgo). El test se
-mira una sola vez, al final, con todo ya decidido.
+umbral de alerta se fija en validación (5 % de pedidos con más riesgo). Recién
+con el modelo y los umbrales elegidos se calculan las métricas de test: se informan
+para los 4 candidatos, como diagnóstico, pero no cambian la elección.
 Escribe reports/comparacion_modelos.json y guarda el modelo en models/.
 """
 
@@ -50,11 +52,10 @@ from src.features import (
     numeric_features,
 )
 from src.target import TARGET_COL
-from src.validation import DEFAULT_TEST_FRACTION, classification_metrics, temporal_cutoff, temporal_split
+from src.validation import classification_metrics, temporal_three_way_split
 
 RANDOM_STATE = 42
 MAX_ITER_LOGISTIC = 2000
-VALIDATION_FRACTION = 0.2
 ALERT_VOLUME = 0.05  # se compara el 5 % de pedidos con más riesgo (nivel "alto" de la decisión 9)
 SELECTION_METRIC = "pr_auc"
 SELECTION_TOLERANCE = 0.01
@@ -64,17 +65,6 @@ MAIN_CANDIDATES = ("logistica_seleccion", "arboles_seleccion", "arboles_completa
 DROPPED_FEATURES = ["purchase_month"]
 SELECTED_EXTRA_FEATURES = ["max_distance_km"]
 MODELS_DIR = Path("models")
-
-
-def three_way_split(
-    table: pd.DataFrame,
-    test_fraction: float = DEFAULT_TEST_FRACTION,
-    validation_fraction: float = VALIDATION_FRACTION,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Train, validación y test en ese orden en el tiempo (mismo criterio que src/umbral.py)."""
-    train_val, test = temporal_split(table, temporal_cutoff(table, test_fraction))
-    train, validation = temporal_split(train_val, temporal_cutoff(train_val, validation_fraction))
-    return train, validation, test
 
 
 def make_logistic(numeric: list[str], categorical: list[str]) -> Pipeline:
@@ -202,11 +192,11 @@ def compare_models(dataset: pd.DataFrame, anchor: str = DEFAULT_ANCHOR) -> tuple
 
     1. Validación cruzada temporal sobre train + validación (elige el modelo).
     2. Cada modelo se entrena en train y se mide en validación (fija el umbral de alerta).
-    3. Test: se reporta una vez, con el modelo ya elegido y el umbral ya fijado.
+    3. Test: con todo ya elegido se miden los 4 candidatos, solo como diagnóstico.
 
     Devuelve (reporte, modelos entrenados en train).
     """
-    train, validation, test = three_way_split(dataset)
+    train, validation, test = temporal_three_way_split(dataset)
     folds = temporal_cv_folds(pd.concat([train, validation]))
     report = {
         "anchor": anchor,
