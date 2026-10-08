@@ -31,6 +31,9 @@ from src.target import TARGET_COL, build_target
 
 GEOLOCATION_FILE = "olist_geolocation_dataset.csv"
 EARTH_RADIUS_KM = 6371.0
+# Extremos del territorio de Brasil (con un margen chico), en grados
+BRAZIL_LAT_RANGE = (-33.8, 5.3)
+BRAZIL_LNG_RANGE = (-74.0, -34.7)
 MIN_SELLER_HISTORY = 5  # con menos pedidos previos la tasa del vendedor es ruido
 
 REGIONS = {
@@ -67,10 +70,19 @@ def load_geolocation(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
 
 
 def _zip_centroids(geolocation: pd.DataFrame) -> pd.DataFrame:
-    """Lat/lng promedio por prefijo de código postal (el geolocation trae varias filas por prefijo)."""
+    """Lat/lng mediana por prefijo de código postal (el geolocation trae varias filas por prefijo).
+
+    Se descartan las coordenadas fuera de Brasil: el geolocation trae algunas
+    erróneas (en Europa o en el océano) que generaban distancias de hasta 8.700 km.
+    Un prefijo sin ninguna coordenada válida queda sin centroide y su distancia,
+    vacía (el pipeline la imputa). La mediana evita que un punto suelto mueva el centro.
+    """
+    lat, lng = geolocation["geolocation_lat"], geolocation["geolocation_lng"]
+    inside_brazil = lat.between(*BRAZIL_LAT_RANGE) & lng.between(*BRAZIL_LNG_RANGE)
     return (
-        geolocation.groupby("geolocation_zip_code_prefix")[["geolocation_lat", "geolocation_lng"]]
-        .mean()
+        geolocation.loc[inside_brazil]
+        .groupby("geolocation_zip_code_prefix")[["geolocation_lat", "geolocation_lng"]]
+        .median()
         .rename(columns={"geolocation_lat": "lat", "geolocation_lng": "lng"})
     )
 

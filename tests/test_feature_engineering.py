@@ -139,3 +139,23 @@ def test_route_and_product_builders_return_one_row_per_order(full_tables):
     context, _ = _context(full_tables)
     for build in (route_features, product_features):
         assert build(context)["order_id"].is_unique
+
+
+def test_coordinates_outside_brazil_are_ignored(full_tables):
+    """Un punto erróneo en Europa no puede mover el centroide ni inflar la distancia."""
+    bad_point = pd.DataFrame(
+        {"geolocation_zip_code_prefix": ["01000"], "geolocation_lat": [48.8], "geolocation_lng": [2.3]}
+    )
+    tables = {**full_tables, "geolocation": pd.concat([full_tables["geolocation"], bad_point])}
+    _, clean = _context(full_tables)
+    _, with_bad_point = _context(tables)
+    pd.testing.assert_series_equal(clean["max_distance_km"], with_bad_point["max_distance_km"])
+
+
+def test_zip_without_valid_coordinates_has_no_distance(full_tables):
+    geolocation = full_tables["geolocation"].assign(
+        geolocation_lat=lambda d: d["geolocation_lat"].where(d["geolocation_zip_code_prefix"] != "20000", 48.8)
+    )
+    _, dataset = _context({**full_tables, "geolocation": geolocation})
+    assert pd.isna(dataset.loc["o3", "max_distance_km"])  # cliente en 20000
+    assert dataset.loc["o2", "max_distance_km"] == pytest.approx(0)
