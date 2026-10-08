@@ -37,11 +37,13 @@ El historial del vendedor es la única feature que mira otros pedidos. Para que 
 | Modelo | PR-AUC CV | ROC-AUC CV | PR-AUC test | ROC-AUC test |
 |---|---|---|---|---|
 | Regresión logística, baseline (referencia) | 0,206 | 0,701 | 0,072 | 0,700 |
-| **Regresión logística, selección (elegido)** | **0,209** | **0,707** | **0,076** | **0,709** |
-| Árboles (HistGradientBoosting), selección | 0,212 | 0,707 | 0,052 | 0,584 |
-| Árboles, todas las features | 0,205 | 0,701 | 0,046 | 0,561 |
+| **Regresión logística, selección (elegido)** | **0,209** | **0,707** | **0,073** | **0,708** |
+| Árboles (HistGradientBoosting), selección | 0,212 | 0,708 | 0,051 | 0,582 |
+| Árboles, todas las features | 0,205 | 0,701 | 0,046 | 0,557 |
 
-En test el piso de PR-AUC es 0,035 (la tasa de retraso). Con el 5 % de alertas fijado en validación, el modelo elegido detecta el 20 % de los retrasos del test con 8,1 % de precisión (el baseline: 15 % con 8,7 %).
+En test el piso de PR-AUC es 0,035 (la tasa de retraso). Con el 5 % de alertas fijado en validación, el modelo elegido detecta el 20 % de los retrasos del test con 7,9 % de precisión (el baseline: 16 % con 8,7 %).
+
+Números con las distancias ya recortadas (ver abajo). Antes del recorte el elegido daba PR-AUC 0,076 en test; la diferencia está dentro del ruido y en la validación cruzada no cambia (0,209).
 
 **Selección de features:** las del baseline sin `purchase_month`, más `max_distance_km`. El mes empeora todos los modelos en validación: la tasa de retraso cambia mucho de un mes a otro (deriva) y el modelo aprende meses que no se repiten. Región, categoría e historial del vendedor no mejoraron la validación, por eso quedan solo en el candidato "todas las features".
 
@@ -51,9 +53,25 @@ En la validación cruzada los árboles empatan con la logística (0,212 contra 0
 
 La regla de empate ya favorecía a la logística antes de mirar el test; el test lo confirma.
 
+## Distancias: coordenadas fuera de Brasil
+
+El geolocation trae 42 filas (21 prefijos postales) con coordenadas fuera de Brasil, en Europa o en el océano. Promediadas con las buenas, generaban distancias de hasta 8.700 km. Ahora `_zip_centroids` descarta las coordenadas fuera del rectángulo de Brasil (latitud -33,8 a 5,3; longitud -74 a -34,7) y usa la mediana por prefijo, que no se mueve por un punto suelto. La distancia máxima baja a 3.400 km. Los prefijos que no tienen ninguna coordenada válida quedan sin distancia (477 pedidos, 0,5 %) y el pipeline la imputa con la mediana.
+
+## Modelo final: reentrenado con train + validación
+
+`python -m src.umbral` (parte 3) fija la calibración de Platt y los cortes de riesgo con el modelo entrenado solo con train, porque necesita predicciones de validación que el modelo no haya visto. Después reentrena el mismo pipeline con train + validación (76.896 pedidos, hasta fines de mayo 2018) y guarda ese modelo en `models/modelo_principal_calibrado.joblib`, con el calibrador y los cortes ya fijados. Con `--sin-reentrenar` se guarda el de train, como antes.
+
+Resultado en test (19.293 pedidos, 3,5 % de retrasos):
+
+| Modelo | ROC-AUC | PR-AUC | Riesgo medio calibrado | Nivel alto: % pedidos | Tasa de retraso en alto | % de retrasos que capta |
+|---|---|---|---|---|---|---|
+| Entrenado con train | 0,708 | 0,073 | 8,2 % | 8,7 % | 7,9 % | 19,8 % |
+| **Reentrenado con train + validación (final)** | **0,708** | **0,074** | **8,3 %** | **9,7 %** | **7,6 %** | **21,1 %** |
+
+Reentrenar no mejora la discriminación en test: los dos modelos ordenan los pedidos igual. Lo usamos igual para la demo porque aprende de los meses más recientes, que son los que más se parecen a los pedidos nuevos. El nivel alto sube de 8,7 % a 9,7 % de los pedidos: el calibrador se ajustó con el modelo de train y el reentrenado da puntajes un poco más altos. Hay que contarlo así en la demo: los cortes se fijan para el 5 %, pero en los meses nuevos el nivel alto marca cerca del 10 %.
+
 ## Pendiente
 
-- **Parte 3:** aplicar la calibración y los niveles de riesgo de `src/umbral.py` al modelo principal (`models/modelo_principal.joblib` trae el pipeline, las columnas y el umbral del 5 %).
 - **Mathias:** sumar sus features del EDA como builders nuevos. `dias_prometidos`, `mes_compra` y `dia_semana_compra` ya existen (`promised_days`, `purchase_month`, `purchase_dayofweek`). Ideas que todavía no están: tiempo histórico de la ruta estado-estado, carga del vendedor en los últimos días, feriados y fin de mes.
-- **Reentrenar con train + validación** antes de la demo. Hoy el modelo guardado se entrena solo con train, para que la calibración y los cortes de la parte 3 se ajusten en validación sin sesgo. Una vez fijados, conviene reentrenar con todo lo anterior al test.
-- **Recortar distancias extremas:** llegan a 8.700 km por coordenadas malas en el geolocation. No cambian el resultado, pero conviene limitar las coordenadas a Brasil.
+- **Recalibrar con datos más nuevos** cuando haya pedidos posteriores a agosto 2018: hoy el calibrador y los cortes salen de mar-may 2018, y en los meses nuevos el nivel alto marca casi el doble del 5 % previsto.
+- `models/modelo_principal.joblib`, que guarda `src/training.py`, es solo para comparar modelos. El que usa la API es `models/modelo_principal_calibrado.joblib`.
