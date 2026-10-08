@@ -52,3 +52,32 @@ def test_risk_level_report_computes_lift():
 def test_cost_threshold():
     assert cost_threshold(1) == pytest.approx(0.5)
     assert cost_threshold(10) == pytest.approx(1 / 11)
+
+
+def test_predict_risk_returns_calibrated_probability_and_level():
+    from sklearn.linear_model import LogisticRegression
+
+    from src.umbral import predict_risk
+
+    rng = np.random.default_rng(1)
+    x = rng.normal(size=(2000, 1))
+    y = (rng.random(2000) < 1 / (1 + np.exp(-(x[:, 0] * 2 - 3)))).astype(int)
+    model = LogisticRegression(class_weight="balanced").fit(x, y)
+    orders = pd.DataFrame({"x": x[:, 0]})
+    scores = model.predict_proba(orders[["x"]].to_numpy())[:, 1]
+    calibrator = PlattCalibrator().fit(scores, y)
+
+    class _Wrapper:
+        def predict_proba(self, frame):
+            return model.predict_proba(frame.to_numpy())
+
+    artifact = {
+        "model": _Wrapper(),
+        "features": ["x"],
+        "calibrator": calibrator,
+        "cuts": risk_level_cuts(calibrator.transform(scores)),
+    }
+    result = predict_risk(artifact, orders)
+    assert list(result.columns) == ["prob_retraso", "nivel_riesgo"]
+    assert result["prob_retraso"].mean() == pytest.approx(y.mean(), abs=0.02)
+    assert set(result["nivel_riesgo"]) == {"alto", "medio", "bajo"}
