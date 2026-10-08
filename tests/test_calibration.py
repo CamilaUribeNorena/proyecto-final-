@@ -81,3 +81,30 @@ def test_predict_risk_returns_calibrated_probability_and_level():
     assert list(result.columns) == ["prob_retraso", "nivel_riesgo"]
     assert result["prob_retraso"].mean() == pytest.approx(y.mean(), abs=0.02)
     assert set(result["nivel_riesgo"]) == {"alto", "medio", "bajo"}
+
+
+def test_retraining_with_validation_keeps_calibration_and_cuts(monkeypatch):
+    import tests.test_baseline as synthetic
+    from src.umbral import run
+
+    monkeypatch.setattr(synthetic, "N_ORDERS", 1500)
+    tables = synthetic._synthetic_tables(seed=2)
+
+    report_train, artifact_train = run(tables, "baseline", reentrenar=False)
+    report_final, artifact_final = run(tables, "baseline", reentrenar=True)
+
+    # calibrador y cortes salen de validación con el modelo de train: no cambian
+    assert artifact_final["cuts"] == artifact_train["cuts"]
+    assert artifact_final["calibrator"].transform(np.array([0.5])) == pytest.approx(
+        artifact_train["calibrator"].transform(np.array([0.5]))
+    )
+    # el modelo guardado sí cambia: se reentrenó con más pedidos
+    assert artifact_final["entrenado_con"] == "train + validacion"
+    assert artifact_train["entrenado_con"] == "train"
+    coef_train = artifact_train["model"].named_steps["model"].coef_
+    coef_final = artifact_final["model"].named_steps["model"].coef_
+    assert not np.allclose(coef_train, coef_final)
+    # el test del modelo final se reporta aparte, sin pisar el del modelo de train
+    assert "test_reentrenado" in report_final["cohortes"]
+    assert "test_reentrenado" not in report_train["cohortes"]
+    assert report_final["cohortes"]["test"] == report_train["cohortes"]["test"]

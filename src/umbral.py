@@ -5,7 +5,10 @@ Uso (desde la raíz del repo, con los 9 CSV en data/raw):
     python -m src.umbral --modelo baseline   # el baseline, como referencia
 
 Entrena el modelo con train, recalibra y fija los cortes de riesgo con validación,
-y reporta en validación y en test (una sola vez). Escribe
+y reporta en validación y en test (una sola vez). Después reentrena el mismo
+pipeline con train + validación (mismas features e hiperparámetros) y lo mide en
+test con el calibrador y los cortes ya fijados: ese es el modelo final que se
+guarda. Con --sin-reentrenar se guarda el entrenado solo con train. Escribe
 reports/umbral_calibracion_<modelo>.json y, para el modelo principal, guarda en
 models/modelo_principal_calibrado.joblib todo lo que necesita la API para dar un
 riesgo por pedido: el modelo, sus columnas, el calibrador y los cortes.
@@ -18,6 +21,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from src.baseline import build_model_table, make_model
@@ -61,6 +65,22 @@ def _cost_rows(y, prob) -> list[dict]:
     return rows
 
 
+def _cohort_report(y, raw, calibrator, cuts) -> dict:
+    """Métricas de una cohorte: discriminación, calibración, niveles de riesgo y umbral por costos."""
+    prob = calibrator.transform(raw)
+    return {
+        "prevalencia": float(y.mean()),
+        "roc_auc": float(roc_auc_score(y, raw)),
+        "pr_auc": float(average_precision_score(y, raw)),
+        "riesgo_medio_sin_calibrar": float(raw.mean()),
+        "riesgo_medio_calibrado": float(prob.mean()),
+        "calibracion_sin_calibrar": calibration_by_decile(y, raw),
+        "calibracion_calibrada": calibration_by_decile(y, prob),
+        "niveles": risk_level_report(y, assign_risk_level(prob, cuts)),
+        "umbral_por_costos": _cost_rows(y, prob),
+    }
+
+
 def prepare(tables: dict, modelo: str = "principal", anchor: str = DEFAULT_ANCHOR):
     """(tabla de modelado, pipeline sin entrenar, columnas) del modelo pedido."""
     if modelo == "principal":
@@ -73,34 +93,33 @@ def prepare(tables: dict, modelo: str = "principal", anchor: str = DEFAULT_ANCHO
     raise ValueError(f"modelo desconocido: {modelo}")
 
 
-def run(tables: dict, modelo: str = "principal", anchor: str = DEFAULT_ANCHOR) -> tuple[dict, dict]:
-    """Devuelve (reporte, artefacto calibrado listo para predecir)."""
+def run(
+    tables: dict, modelo: str = "principal", anchor: str = DEFAULT_ANCHOR, reentrenar: bool = True
+) -> tuple[dict, dict]:
+    """Devuelve (reporte, artefacto calibrado listo para predecir).
+
+    Con reentrenar=True el artefacto usa el modelo reentrenado con train + validación;
+    el calibrador y los cortes de riesgo siguen siendo los fijados en validación.
+    """
     table, pipeline, features = prepare(tables, modelo, anchor)
     train, validation, test = temporal_three_way_split(table)
-    model = pipeline.fit(train[features], train[TARGET_COL])
+    model = clone(pipeline).fit(train[features], train[TARGET_COL])
 
     parts = {"validacion": validation, "test": test}
     raw = {name: model.predict_proba(part[features])[:, 1] for name, part in parts.items()}
     y = {name: part[TARGET_COL].to_numpy() for name, part in parts.items()}
 
     calibrator = PlattCalibrator().fit(raw["validacion"], y["validacion"])
-    prob = {name: calibrator.transform(s) for name, s in raw.items()}
-    cuts = risk_level_cuts(prob["validacion"])
+    cuts = risk_level_cuts(calibrator.transform(raw["validacion"]))
 
-    cohorts = {
-        name: {
-            "prevalencia": float(y[name].mean()),
-            "roc_auc": float(roc_auc_score(y[name], raw[name])),
-            "pr_auc": float(average_precision_score(y[name], raw[name])),
-            "riesgo_medio_sin_calibrar": float(raw[name].mean()),
-            "riesgo_medio_calibrado": float(prob[name].mean()),
-            "calibracion_sin_calibrar": calibration_by_decile(y[name], raw[name]),
-            "calibracion_calibrada": calibration_by_decile(y[name], prob[name]),
-            "niveles": risk_level_report(y[name], assign_risk_level(prob[name], cuts)),
-            "umbral_por_costos": _cost_rows(y[name], prob[name]),
-        }
-        for name in parts
-    }
+    cohorts = {name: _cohort_report(y[name], raw[name], calibrator, cuts) for name in parts}
+    final_model = model
+    if reentrenar:
+        train_val = pd.concat([train, validation])
+        final_model = clone(pipeline).fit(train_val[features], train_val[TARGET_COL])
+        cohorts["test_reentrenado"] = _cohort_report(
+            y["test"], final_model.predict_proba(test[features])[:, 1], calibrator, cuts
+        )
     report = {
         "modelo": modelo,
         "anchor": anchor,
@@ -108,9 +127,17 @@ def run(tables: dict, modelo: str = "principal", anchor: str = DEFAULT_ANCHOR) -
         "periodos": {"train": _period(train), "validacion": _period(validation), "test": _period(test)},
         "tamanos": {"train": len(train), "validacion": len(validation), "test": len(test)},
         "cortes_riesgo_validacion": cuts,
+        "reentrenado_con_validacion": reentrenar,
         "cohortes": cohorts,
     }
-    artifact = {"model": model, "features": features, "calibrator": calibrator, "cuts": cuts, "anchor": anchor}
+    artifact = {
+        "model": final_model,
+        "features": features,
+        "calibrator": calibrator,
+        "cuts": cuts,
+        "anchor": anchor,
+        "entrenado_con": "train + validacion" if reentrenar else "train",
+    }
     return report, artifact
 
 
@@ -129,12 +156,15 @@ def main() -> None:
     parser.add_argument("--raw-dir", type=Path, default=RAW_DIR)
     parser.add_argument("--modelo", choices=MODELS, default="principal")
     parser.add_argument("--output-dir", type=Path, default=Path("reports"))
+    parser.add_argument(
+        "--sin-reentrenar", action="store_true", help="guarda el modelo entrenado solo con train"
+    )
     args = parser.parse_args()
 
     tables = load_raw_tables(args.raw_dir)
     if args.modelo == "principal":
         tables = {**tables, "geolocation": load_geolocation(args.raw_dir)}
-    report, artifact = run(tables, args.modelo)
+    report, artifact = run(tables, args.modelo, reentrenar=not args.sin_reentrenar)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     out = args.output_dir / f"umbral_calibracion_{args.modelo}.json"
