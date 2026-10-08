@@ -55,7 +55,17 @@ La regla de empate ya favorecía a la logística antes de mirar el test; el test
 
 ## Distancias: coordenadas fuera de Brasil
 
-El geolocation trae 42 filas (21 prefijos postales) con coordenadas fuera de Brasil, en Europa o en el océano. Promediadas con las buenas, generaban distancias de hasta 8.700 km. Ahora `_zip_centroids` descarta las coordenadas fuera del rectángulo de Brasil (latitud -33,8 a 5,3; longitud -74 a -34,7) y usa la mediana por prefijo, que no se mueve por un punto suelto. La distancia máxima baja a 3.400 km. Los prefijos que no tienen ninguna coordenada válida quedan sin distancia (477 pedidos, 0,5 %) y el pipeline la imputa con la mediana.
+El geolocation trae 42 filas (21 prefijos postales) con coordenadas fuera de Brasil, en Europa o en el océano. Promediadas con las buenas, generaban distancias de hasta 8.700 km. Ahora `_zip_centroids` descarta las coordenadas fuera del rectángulo de Brasil (latitud -33,8 a 5,3; longitud -74 a -34,7) y usa la mediana por prefijo, que no se mueve por un punto suelto. La distancia máxima baja de 8.700 a 3.400 km.
+
+| Cohorte | Pedidos | Distancia cambia más de 1 km | Tenían más de 3.500 km | Quedan sin distancia por el recorte |
+|---|---|---|---|---|
+| Train | 61.276 | 3.888 | 3 | 0 |
+| Validación | 15.620 | 967 | 2 | 0 |
+| Test | 19.293 | 1.122 | 2 | 1 |
+
+Conteo por pedido, comparando `max_distance_km` antes del recorte (promedio de todas las coordenadas) y después (mediana de las coordenadas dentro de Brasil): "cambia más de 1 km" es diferencia absoluta estrictamente mayor a 1 km entre pedidos que tienen distancia en las dos versiones. El pedido que se queda sin distancia va solo en la última columna.
+
+Casi todos los cambios son de pocos kilómetros y vienen de usar la mediana en lugar del promedio; solo 7 pedidos tenían distancias imposibles. En total 477 pedidos (0,5 %) no tienen distancia: 476 porque su código postal no está en el geolocation y 1 porque su prefijo solo tenía coordenadas fuera de Brasil. El pipeline la imputa con la mediana.
 
 ## Modelo final: reentrenado con train + validación
 
@@ -69,6 +79,8 @@ Resultado en test (19.293 pedidos, 3,5 % de retrasos):
 | **Reentrenado con train + validación (final)** | **0,708** | **0,074** | **8,3 %** | **9,7 %** | **7,6 %** | **21,1 %** |
 
 Reentrenar no mejora la discriminación en test: los dos modelos ordenan los pedidos igual. Lo usamos igual para la demo porque aprende de los meses más recientes, que son los que más se parecen a los pedidos nuevos. El nivel alto sube de 8,7 % a 9,7 % de los pedidos: el calibrador se ajustó con el modelo de train y el reentrenado da puntajes un poco más altos. Hay que contarlo así en la demo: los cortes se fijan para el 5 %, pero en los meses nuevos el nivel alto marca cerca del 10 %.
+
+**Cómo leer las probabilidades:** las probabilidades calibradas están infladas en los meses nuevos. En test el riesgo medio calibrado es 8,3 % y la tasa real 3,5 %, por dos motivos: el calibrador se ajustó con los puntajes del modelo de train y se aplica al reentrenado, y la tasa de retraso de esos meses cayó a la mitad. Lo confiable es el orden y los niveles: en el nivel alto la tasa de retraso es 2,2 veces la media (lift 2,18).
 
 ## Pendiente
 
