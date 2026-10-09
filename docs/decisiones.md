@@ -113,3 +113,13 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Modelo final (2026-10-08):** se reentrena con train + validación en `src/umbral.py` y se guarda calibrado para la API. En test ordena igual que el de train (ROC-AUC 0,708). Detalle en `docs/decisiones_modelos.md`.
 - **Por qué no árboles:** empatan en la validación cruzada pero en test caen a ROC-AUC 0,58, porque Olist acortó los plazos prometidos y los árboles no extrapolan ese cambio.
 - **Implementación:** `src/feature_engineering.py` (features de ruta, producto e historial del vendedor, extensible con `FEATURE_BUILDERS`) y `src/training.py` (`python -m src.training`). Detalle y tabla completa en `docs/decisiones_modelos.md`.
+
+## 11. Script de unificación para el dashboard
+
+- **Estado:** Acordada (con la aprobación del PR por Agustina).
+- **Decisión:** el modelo estrella y la tabla plana para Power BI y EDA se generan con `scripts/unificacion/unificar_olist.py`. `scripts/` es para scripts reproducibles que no son lógica del modelo; `src/` queda para código con tests. Los CSV de salida no se suben (punto 7).
+- **Por qué:** el dashboard necesita relaciones entre tablas sin duplicar filas ni importes, y el script lo valida. Cada integrante regenera las tablas desde los CSV de Kaggle.
+- **Alineación con el target:** `entrega_tardia` usa la regla del punto 2 (día calendario, solo `delivered` con ambas fechas): 96.470 pedidos etiquetados y tasa de retraso 0,0677.
+- **Límite:** `fact_orders` incluye datos posteriores a la aprobación (fechas de entrega, reseñas). Por el punto 4 no es entrada del modelo, que usa la tabla de `src/features.py`.
+- **Implementación:** `python scripts/unificacion/unificar_olist.py data/raw data/processed/olist_limpio`. Detalle en `scripts/unificacion/README.md`.
+- **Pendiente:** reutilizar `src/target.py` para tener una sola definición del target y agregar tests.
