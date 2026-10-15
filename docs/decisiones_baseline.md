@@ -3,14 +3,14 @@
 ## Target: pedido retrasado
 
 - Función única: `src/target.py::build_target`. Todo el equipo debería usar esta función y no recalcular el target en notebooks.
-- `is_late = 1` si el pedido se entregó después de `order_estimated_delivery_date`.
+- `pedido_retrasado = 1` si el pedido se entregó después de `order_estimated_delivery_date`.
 - Solo pedidos con `order_status == "delivered"` y con ambas fechas presentes. En los demás el retraso no se observa.
 
 ### Por qué comparamos por día calendario
 
 `order_estimated_delivery_date` siempre viene a las 00:00, pero `order_delivered_customer_date` trae la hora real. Si se comparan los timestamps completos, un pedido entregado **el mismo día prometido** (por ejemplo a las 15:00) cuenta como retrasado. Por eso aparecían dos tasas distintas en los chats del equipo (8,1 % y 6,8 %).
 
-Confirmado con los datos (96.470 pedidos entregados): por timestamp da 8,11 % y por día calendario 6,77 %.
+Confirmado con los datos (96.470 pedidos entregados): por timestamp da 8,11 % y por día calendario 6,77 %. Con el período de estudio (decisión 8 de `docs/decisiones.md`): 96.203 pedidos y 6,79 %.
 
 Decisión: comparamos solo la fecha (`.dt.normalize()`). Es retraso únicamente si llegó un día posterior al prometido, que es como lo vive el cliente. La comparación por timestamp queda disponible con `build_target(..., by_calendar_day=False)` y el script reporta las dos tasas (`late_rate_all_delivered` y `late_rate_timestamp_comparison`) para que quede trazable.
 

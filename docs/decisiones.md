@@ -19,6 +19,7 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Decisión:** 1 si `order_delivered_customer_date` cae en un día posterior a `order_estimated_delivery_date`. Solo pedidos con estado `delivered` y ambas fechas presentes.
 - **Por qué:** la fecha estimada viene siempre a las 00:00. Comparando con la hora, un pedido entregado el mismo día prometido cuenta como tarde. Con los datos de Kaggle: 8,11 % comparando timestamps contra 6,77 % por día calendario (96.470 pedidos entregados). Usamos 6,77 %.
 - **Implementación:** una sola función reutilizable en `src/`. Nadie recalcula el target en un notebook.
+- **Actualización (2026-10-05):** con el período de estudio de la decisión 8, la población queda en 96.203 pedidos y la tasa en 6,79 %. En el código la columna se llama `pedido_retrasado` (antes `is_late`).
 
 ## 3. Momento de predicción: al aprobar la compra
 
@@ -46,6 +47,7 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Decisión:** se entrena con pedidos más viejos y se evalúa con los más nuevos, ordenados por la fecha del momento de predicción. Nunca split aleatorio. Las transformaciones se ajustan solo con train.
 - **Métricas:** matriz de confusión, precision, recall, F1, ROC-AUC y PR-AUC. El umbral se elige con validación, no con test.
 - **Pendiente:** el baseline actual divide solo en train y test y reporta las métricas con umbral fijo 0,5 directo en test. Falta separar un conjunto de validación (entre train y test, también por fecha) para elegir el umbral ahí y dejar el test solo para la evaluación final.
+- **Actualización (2026-10-06):** `temporal_three_way_split` en `src/validation.py` separa train, validación y test por fecha. Se usa en `src/umbral.py` (decisión 9). Queda pendiente la validación cruzada temporal con varios cortes.
 
 ## 6. Flujo de trabajo con Git
 
@@ -61,3 +63,63 @@ Registro corto de lo que acordamos y por qué. Cada decisión nueva se agrega ab
 - **Estado:** Acordada.
 - Los CSV de Kaggle se descargan a `data/raw/` y no se suben. El `.gitignore` ignora todo `data/` (salvo los `.gitkeep`), y además `*.csv`, `*.zip`, `*.pdf`, `*.docx` y `*.xlsx` en cualquier carpeta, para que nadie suba datos o documentos personales por error.
 - Antes de cada commit: revisar `git status` y no usar `git add .` sin mirar.
+
+## 8. Período de estudio: compras de enero 2017 a agosto 2018
+
+- **Estado:** Acordada (5 oct, chat del equipo).
+- **Decisión:** entran solo los pedidos comprados desde el 1 de enero de 2017 hasta el 31 de agosto de 2018. Con el target de la decisión 2 quedan **96.203 pedidos y 6,79 % de retrasos**.
+- **Por qué se excluye 2016:** son 267 pedidos entregados, con meses casi vacíos. No representan la operación.
+- **Por qué se corta en agosto 2018 (sesgo de censura):** los datos terminan el 17 de octubre de 2018. Un pedido que todavía no llegó a esa fecha no se puede etiquetar, y si los que faltan son justamente los demorados, la tasa del final parece más baja de lo que es.
+  - Septiembre y octubre de 2018 tienen 20 pedidos y ninguno se entregó: se excluyen.
+  - A una compra del 31 de agosto le quedan 47 días hasta el corte, y el 99 % de los pedidos se entrega en 46 días o menos. Solo el 0,8 % tarda más.
+  - Julio y agosto de 2018 tienen la misma proporción de pedidos entregados que los meses anteriores (97–98 %).
+  - Conclusión: el sesgo de censura en julio y agosto es menor a un punto porcentual. La tasa baja de esos meses (3,4 % y 6,2 %) es real, no un efecto del corte.
+- **Implementación:** `PERIOD_START` y `PERIOD_END` en `src/target.py`. `build_target` filtra el período por defecto; con `only_study_period=False` se ven todos los pedidos, solo para comparar.
+
+## 9. Calibración y niveles de riesgo
+
+- **Estado:** Propuesta (tarea 3). Se ratifica en el daily.
+- **Problema:** el baseline entrena con `class_weight="balanced"`. Ordena bien los pedidos (ROC-AUC 0,73 en validación), pero sus probabilidades están infladas: predice 48,6 % de riesgo medio cuando la tasa real de validación es 6,8 %. Con el umbral fijo de 0,5 alerta sobre casi la mitad de los pedidos.
+- **Decisión:**
+  1. **Tres cohortes por fecha:** train (ene 2017 a mar 2018), validación (mar a may 2018) y test (fines de may a ago 2018). Calibración, cortes y umbral se eligen en validación; el test se usa una sola vez.
+  2. **Recalibración de Platt** ajustada en validación. En validación el riesgo medio queda en 6,8 % (igual a la tasa real). En test predice 7,1 % frente a 3,5 % real, porque la prevalencia cae a la mitad: ninguna calibración fija aguanta un cambio así.
+  3. **Niveles de riesgo por volumen de pedidos, no por probabilidad:** alto = 5 % de pedidos con más riesgo, medio = 15 % siguiente, bajo = el resto. Los cortes se fijan en validación y se aplican sin cambios. Así el volumen de alertas es estable aunque cambie la prevalencia.
+  4. **Umbral por costos** (1 / (1 + r), con r = costo de un falso negativo / costo de un falso positivo) solo como análisis de sensibilidad con r = 5, 10 y 20, no como regla única.
+- **Resultado en test:**
+
+| Nivel | % de pedidos | Tasa de retraso | % de los retrasos | Lift |
+|---|---|---|---|---|
+| Alto | 6,2 % | 8,7 % | 15,5 % | 2,49 |
+| Medio | 15,4 % | 5,0 % | 22,0 % | 1,43 |
+| Bajo | 78,4 % | 2,8 % | 62,6 % | 0,80 |
+
+- **Aplicado al modelo principal (decisión 10), en test:** riesgo medio calibrado 8,3 % frente a 3,5 % real (en validación 6,8 % = tasa real). Es el modelo final: reentrenado con train + validación, con el calibrador y los cortes fijados en validación (actualización 2026-10-08).
+
+| Nivel | % de pedidos | Tasa de retraso | % de los retrasos | Lift |
+|---|---|---|---|---|
+| Alto | 9,7 % | 7,6 % | 21,1 % | 2,18 |
+| Medio | 17,8 % | 5,6 % | 28,5 % | 1,60 |
+| Bajo | 72,5 % | 2,4 % | 50,4 % | 0,69 |
+
+  En test el nivel alto cubre 9,7 % de pedidos y no 5 %: con los cortes fijos de validación, el modelo principal sube los puntajes de los meses nuevos. El volumen de alertas se mueve menos que con un umbral fijo, pero hay que vigilarlo en producción.
+- **Por qué:** con la prevalencia mensual entre 1,2 % y 19 % (EDA), un umbral fijo dispara cantidades muy distintas de alertas según el mes. Logística necesita saber cuántos pedidos va a revisar.
+- **Implementación:** `src/calibration.py` y `src/umbral.py` `python -m src.umbral` aplica la calibración al modelo principal, escribe `reports/umbral_calibracion_principal.json` y guarda el artefacto calibrado (modelo, features, calibrador y cortes) en `models/modelo_principal_calibrado.joblib`, que es el que servirá la API. `python -m src.umbral --modelo baseline` reproduce la tabla del baseline. `predict_risk(artefacto, pedidos)` devuelve `prob_retraso` y `nivel_riesgo`. Pruebas en `tests/test_calibration.py`.
+
+## 10. Modelo principal: regresión logística con selección de features
+
+- **Estado:** Propuesta (parte 2). Se ratifica en el daily.
+- **Decisión:** el modelo principal es una regresión logística balanceada con las variables del baseline sin `purchase_month`, más la distancia cliente-vendedor (`max_distance_km`). Se elige con validación cruzada temporal de 4 tramos sobre train + validación, por PR-AUC medio, y ante un empate (menos de 0,01) gana el modelo más simple.
+- **Resultado en test:** ROC-AUC 0,708 y PR-AUC 0,073, contra 0,700 y 0,072 del baseline (con las distancias recortadas a Brasil; antes del recorte, 0,709 y 0,076).
+- **Modelo final (2026-10-08):** se reentrena con train + validación en `src/umbral.py` y se guarda calibrado para la API. En test ordena igual que el de train (ROC-AUC 0,708). Detalle en `docs/decisiones_modelos.md`.
+- **Por qué no árboles:** empatan en la validación cruzada pero en test caen a ROC-AUC 0,58, porque Olist acortó los plazos prometidos y los árboles no extrapolan ese cambio.
+- **Implementación:** `src/feature_engineering.py` (features de ruta, producto e historial del vendedor, extensible con `FEATURE_BUILDERS`) y `src/training.py` (`python -m src.training`). Detalle y tabla completa en `docs/decisiones_modelos.md`.
+
+## 11. Script de unificación para el dashboard
+
+- **Estado:** Acordada (con la aprobación del PR por Agustina).
+- **Decisión:** el modelo estrella y la tabla plana para Power BI y EDA se generan con `scripts/unificacion/unificar_olist.py`. `scripts/` es para scripts reproducibles que no son lógica del modelo; `src/` queda para código con tests. Los CSV de salida no se suben (punto 7).
+- **Por qué:** el dashboard necesita relaciones entre tablas sin duplicar filas ni importes, y el script lo valida. Cada integrante regenera las tablas desde los CSV de Kaggle.
+- **Alineación con el target:** `entrega_tardia` usa la regla del punto 2 (día calendario, solo `delivered` con ambas fechas): 96.470 pedidos etiquetados y tasa de retraso 0,0677.
+- **Límite:** `fact_orders` incluye datos posteriores a la aprobación (fechas de entrega, reseñas). Por el punto 4 no es entrada del modelo, que usa la tabla de `src/features.py`.
+- **Implementación:** `python scripts/unificacion/unificar_olist.py data/raw data/processed/olist_limpio`. Detalle en `scripts/unificacion/README.md`.
+- **Pendiente:** reutilizar `src/target.py` para tener una sola definición del target y agregar tests.
