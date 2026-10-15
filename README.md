@@ -2,7 +2,26 @@
 
 Proyecto de ciencia de datos orientado a estimar el riesgo de retraso en las entregas de pedidos de Olist, utilizando información comercial y logística disponible al momento de aprobar la compra.
 
-**Estado:** en desarrollo. Actualmente se está preparando el entorno de trabajo y explorando los datos. Todavía no hay un modelo entrenado ni una aplicación desplegada.
+**Estado:** cierre del Sprint 1 (DEMO 1, 14 de octubre de 2026). Base de datos, EDA, target, modelo principal calibrado y niveles de riesgo terminados. La app en Streamlit, la API y el tablero de Power BI son del Sprint 2.
+
+## Índice
+
+1. [Problema de negocio](#problema-de-negocio)
+2. [Objetivo](#objetivo)
+3. [Alcance](#alcance)
+4. [Datos](#datos)
+5. [Definición de la predicción](#definición-de-la-predicción)
+6. [Variables candidatas](#variables-candidatas)
+7. [Metodología](#metodología)
+8. [Evaluación](#evaluación)
+9. [Dónde está cada entregable](#dónde-está-cada-entregable)
+10. [Estructura prevista](#estructura-prevista)
+11. [Herramientas previstas](#herramientas-previstas)
+12. [Cómo instalar y correr el proyecto](#cómo-instalar-y-correr-el-proyecto)
+13. [Cómo trabajamos con Git](#cómo-trabajamos-con-git)
+14. [Limitaciones](#limitaciones)
+15. [Próximos pasos](#próximos-pasos)
+16. [Autoría](#autoría)
 
 ## Problema de negocio
 
@@ -112,6 +131,21 @@ El umbral de alerta se seleccionará con los datos de validación, considerando 
 
 También se revisará la calibración antes de interpretar los valores estimados como probabilidades de riesgo.
 
+## Dónde está cada entregable
+
+| Entregable | Dónde |
+|---|---|
+| Decisiones del equipo (11) | [`docs/decisiones.md`](docs/decisiones.md) |
+| Exploración del target y control de fuga | [`notebooks/01_exploracion_y_target.ipynb`](notebooks/01_exploracion_y_target.ipynb) · [`docs/aporte_mathias_exploracion.md`](docs/aporte_mathias_exploracion.md) |
+| EDA con gráficos | [`notebooks/02_eda_graficos.ipynb`](notebooks/02_eda_graficos.ipynb) · [`reports/figuras/`](reports/figuras/) · [`docs/aporte_alexis_eda_graficos.md`](docs/aporte_alexis_eda_graficos.md) |
+| Base de datos en BigQuery | [`sql/`](sql/) |
+| Target y período de estudio | [`src/target.py`](src/target.py) |
+| Baseline | [`src/baseline.py`](src/baseline.py) · [`docs/decisiones_baseline.md`](docs/decisiones_baseline.md) |
+| Features, comparación de modelos y modelo principal | [`src/feature_engineering.py`](src/feature_engineering.py) · [`src/training.py`](src/training.py) · [`docs/decisiones_modelos.md`](docs/decisiones_modelos.md) |
+| Calibración y niveles de riesgo | [`src/calibration.py`](src/calibration.py) · [`src/umbral.py`](src/umbral.py) |
+| Esquema estrella para Power BI | [`scripts/unificacion/`](scripts/unificacion/) |
+| Tests (anti-fuga, target, calibración) | [`tests/`](tests/) |
+
 ## Estructura prevista
 
 | Ruta | Propósito |
@@ -193,16 +227,25 @@ El detalle y las decisiones del equipo están en [`docs/decisiones.md`](docs/dec
 
 - [x] Configurar el entorno local y las dependencias.
 - [x] Incorporar las reglas de exclusión de datos en `.gitignore`.
-- [ ] Explorar la tabla de pedidos.
+- [x] Explorar la tabla de pedidos (`notebooks/01_exploracion_y_target.ipynb`).
 - [x] Construir la tabla analítica (`src/features.py`, una fila por pedido).
 - [x] Baseline entrenado y evaluado (regresión logística con validación temporal, `src/baseline.py`).
-- [ ] Desarrollar el análisis exploratorio.
+- [x] Desarrollar el análisis exploratorio (`notebooks/02_eda_graficos.ipynb`).
 - [x] Entrenar y evaluar modelos (`src/training.py`, ver `docs/decisiones_modelos.md`).
-- [ ] Construir la demo.
+- [x] Calibrar el modelo principal y definir niveles de riesgo (`src/umbral.py`).
+- [ ] Construir la demo en Streamlit y la API (Sprint 2).
 - [ ] Documentar resultados y conclusiones.
 
 ## Autoría
 
-Desarrollo inicial: **María Camila Uribe Noreña**.
+Proyecto final de Data Science de Henry, desarrollado por el equipo **DataCraft**:
 
-Proyecto de aprendizaje y prototipado para su posterior presentación y discusión con el equipo.
+| Integrante | Rol | Aportes principales |
+|---|---|---|
+| Agustina Baez | Data Scientist · Scrum Master | Proceso del equipo, revisión y aprobación de los pull requests |
+| Cristian Atrio | Data Scientist | Entorno y repositorio, baseline, features y modelo principal |
+| Alexis Sircelj | Data Scientist | Base de datos, esquema estrella para Power BI y EDA con gráficos |
+| Mathias Chaparro | Data Scientist | Exploración del target, control de fuga y auditoría de datos |
+| María Camila Uribe Noreña | Data Scientist | Período de estudio, base en BigQuery, calibración y niveles de riesgo |
+
+Proyecto educativo y de prototipado.
