@@ -143,6 +143,7 @@ También se revisará la calibración antes de interpretar los valores estimados
 | Baseline | [`src/baseline.py`](src/baseline.py) · [`docs/decisiones_baseline.md`](docs/decisiones_baseline.md) |
 | Features, comparación de modelos y modelo principal | [`src/feature_engineering.py`](src/feature_engineering.py) · [`src/training.py`](src/training.py) · [`docs/decisiones_modelos.md`](docs/decisiones_modelos.md) |
 | Calibración y niveles de riesgo | [`src/calibration.py`](src/calibration.py) · [`src/umbral.py`](src/umbral.py) |
+| Métricas de evaluación, plan de validación y justificación del modelo | [`docs/metricas_evaluacion.md`](docs/metricas_evaluacion.md) |
 | Esquema estrella para Power BI | [`scripts/unificacion/`](scripts/unificacion/) |
 | Tests (anti-fuga, target, calibración) | [`tests/`](tests/) |
 
