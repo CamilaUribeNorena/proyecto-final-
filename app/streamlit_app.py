@@ -35,6 +35,7 @@ from app.riesgo import (  # noqa: E402
 )
 from app.vista import (  # noqa: E402
     LEVEL_ALL,
+    ROW_HEIGHT,
     SCORE_SCALE,
     filter_orders,
     format_factor,
@@ -45,6 +46,7 @@ from app.vista import (  # noqa: E402
     lift_high,
     order_exists,
     plural,
+    table_height,
     table_view,
 )
 from src.calibration import LEVELS  # noqa: E402
@@ -60,10 +62,9 @@ LEVEL_INFO = {
 }
 FACTORS_UP, FACTORS_DOWN = 3, 2
 ARROWS = {"up": "↑", "down": "↓"}
-TABLE_HEIGHT = 420
 CHART_STEP, CHART_BAR = 40, 28  # alto de cada fila del gráfico y de la barra dentro de la fila
 HINT_DEFAULT = "Viendo el pedido más riesgoso de la lista (seleccioná otra fila para inspeccionar)"
-COPY_LABEL = "⧉ Copiar ID del pedido"
+COPY_LABEL, COPIED_LABEL = "📋 Copiar ID del pedido", "✅ ¡ID copiado!"
 DEFAULT_THEME = "light"
 # Qué ofrece el botón de la cabecera en cada modo: el modo al que se pasa.
 THEME_SWITCH = {"light": ("🌙 Oscuro", "Cambiar a modo oscuro"), "dark": ("☀️ Claro", "Cambiar a modo claro")}
@@ -145,6 +146,12 @@ def _seed() -> dict:
     return st.session_state.get("seed", {})
 
 
+def _clear_search() -> None:
+    """Borra lo buscado y conserva el período y el nivel elegidos."""
+    keep = {name: st.session_state.get(_widget_key(name)) for name in ("period", "level")}
+    _reset_filters({name: value for name, value in keep.items() if value is not None})
+
+
 def show_header() -> None:
     """Marca a la izquierda y, en la misma barra, el botón de modo claro / oscuro."""
     p = palette()
@@ -175,12 +182,21 @@ def show_toolbar(scored: pd.DataFrame) -> tuple[pd.DataFrame, str, bool, tuple]:
             format="DD/MM/YYYY",
             key=_widget_key("period"),
         )
-        search = middle.text_input(
+        search_col, clear_col = middle.columns([3.3, 1.7], vertical_alignment="bottom")
+        search = search_col.text_input(
             "Buscar un pedido",
             _seed().get("search", ""),
             placeholder="Pegá el código del pedido",
             key=_widget_key("search"),
         )
+        if search.strip():
+            clear_col.button(
+                "✕ Limpiar búsqueda",
+                key="clear_search",
+                type="tertiary",
+                help="Borra el código y deja el período y el nivel como están",
+                on_click=_clear_search,
+            )
         show_real = right.toggle(
             "Mostrar si se retrasó", key="show_real", help="Dato histórico: en un pedido nuevo todavía no se sabe."
         )
@@ -380,7 +396,8 @@ def show_table(listed: pd.DataFrame, view: pd.DataFrame) -> tuple[str, int | Non
         view,
         hide_index=True,
         width="stretch",
-        height=TABLE_HEIGHT,
+        height=table_height(len(view)),  # se achica cuando quedan pocas filas
+        row_height=ROW_HEIGHT,
         on_select="rerun",
         selection_mode="single-row",
         column_config=TABLE_COLUMNS,
@@ -505,7 +522,7 @@ def _copy_button(order_id: str) -> None:
   const orderId = {json.dumps(order_id)};
   const button = document.getElementById("copy");
   const done = () => {{
-    button.textContent = "✓ ID copiado";
+    button.textContent = {json.dumps(COPIED_LABEL)};
     button.classList.add("ok");
     setTimeout(() => {{ button.textContent = {json.dumps(COPY_LABEL)}; button.classList.remove("ok"); }}, 1600);
   }};

@@ -4,6 +4,8 @@ import pytest
 from app.vista import (
     LEVEL_ALL,
     MIN_BAR_SHARE,
+    ROW_HEIGHT,
+    TABLE_MAX_HEIGHT,
     filter_orders,
     format_factor,
     impact_weights,
@@ -11,6 +13,7 @@ from app.vista import (
     lift_high,
     order_exists,
     plural,
+    table_height,
     table_view,
 )
 from src.features import PREDICTION_TIME_COL
@@ -59,6 +62,15 @@ def test_table_view_scores_from_0_to_100_and_shows_real_delay_on_demand(scored):
     assert list(view["Puntaje"]) == [62, 35, 8, 5]
     assert "¿Se retrasó?" not in view.columns
     assert list(table_view(scored, show_real=True)["¿Se retrasó?"]) == ["Sí", "No", "No", "No"]
+
+
+def test_table_height_fits_the_rows_up_to_a_cap():
+    one_row = ROW_HEIGHT * 2 + 3  # cabecera + una fila + bordes
+    assert table_height(1) == one_row
+    assert table_height(0) == one_row  # nunca más chica que una fila
+    assert table_height(3) == ROW_HEIGHT * 4 + 3
+    assert table_height(1865) == TABLE_MAX_HEIGHT
+    assert table_height(5, max_height=100) == 100
 
 
 def test_late_summary_counts_real_delays_only_when_shown(scored):

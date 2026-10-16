@@ -12,6 +12,14 @@ from src.target import TARGET_COL
 LEVEL_ALL = "todos"
 SCORE_SCALE = 100  # el puntaje se muestra de 0 a 100
 MIN_BAR_SHARE = 0.08  # ancho mínimo de una barra de impacto, para que siempre se vea
+ROW_HEIGHT = 35  # alto de cada fila de la grilla (y de su cabecera), en píxeles
+TABLE_FRAME = 3  # bordes de la grilla
+TABLE_MAX_HEIGHT = 420
+
+
+def table_height(n_rows: int, max_height: int = TABLE_MAX_HEIGHT) -> int:
+    """Alto justo para las filas que hay (cabecera incluida), con tope para no estirar la tabla."""
+    return min(max_height, ROW_HEIGHT * (max(n_rows, 1) + 1) + TABLE_FRAME)
 
 
 def format_int(value) -> str:

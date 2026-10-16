@@ -107,10 +107,14 @@ h1, h2, h3, .dc-serif {{ font-family: Georgia, 'Times New Roman', serif; letter-
 /* Cabecera con el selector de modo claro / oscuro */
 .st-key-dc-header {{ background: {p["header_bg"]}; border: 1px solid {p["header_line"]}; border-radius: 14px;
   padding: 10px 24px; margin-bottom: 18px; }}
-.dc-brand {{ display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }}
-.dc-logo {{ font-family: Georgia, serif; font-size: 1.7rem; font-weight: 600; color: {p["header_text"]}; }}
+/* La marca mide lo mismo que el botón (40 px) y ambas columnas se centran en la barra. El
+   contenedor de markdown no sigue el alto del texto grande, por eso se fija también. */
+.st-key-dc-header [data-testid="stMarkdown"]:has(.dc-brand),
+.st-key-dc-header [data-testid="stMarkdownContainer"]:has(> .dc-brand) {{ height: 40px; }}
+.dc-brand {{ display: flex; align-items: center; gap: 18px; height: 40px; white-space: nowrap; overflow: hidden; }}
+.dc-logo {{ font-family: Georgia, serif; font-size: 1.7rem; font-weight: 600; line-height: 1; color: {p["header_text"]}; }}
 .dc-logo span {{ color: {p["accent"]}; }}
-.dc-sub {{ color: {p["header_sub"]}; font-size: 1rem; }}
+.dc-sub {{ color: {p["header_sub"]}; font-size: 1rem; line-height: 1; overflow: hidden; text-overflow: ellipsis; }}
 .st-key-dc-header button {{ background: transparent !important; border: 1px solid {p["header_sub"]} !important;
   transition: background .15s ease, border-color .15s ease; }}
 .st-key-dc-header button:hover {{ background: rgba(255,255,255,.1) !important; border-color: {p["header_text"]} !important; }}
