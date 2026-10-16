@@ -9,7 +9,8 @@ que el modelo no vio). Cuando esté la API, la app le va a pedir el riesgo a la
 API en lugar de cargar el modelo.
 
 La lógica de negocio vive en app/riesgo.py, los helpers de pantalla en
-app/vista.py y los estilos en app/estilos.py: este archivo compone la pantalla.
+app/vista.py y las paletas y el CSS en app/estilos.py: este archivo compone la
+pantalla. El modo claro u oscuro vive en `st.session_state.theme_mode`.
 """
 
 import json
@@ -23,7 +24,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # para importar src y app
 
-from app.estilos import CREAM, CSS, LEVEL_COLORS, LEVEL_SOFT, LEVEL_TEXT, NAVY, WHITE  # noqa: E402
+from app.estilos import PALETTES, build_css  # noqa: E402
 from app.riesgo import (  # noqa: E402
     SEMAFORO,
     format_feature_value,
@@ -62,6 +63,9 @@ TABLE_HEIGHT = 420
 CHART_STEP, CHART_BAR = 40, 28  # alto de cada fila del gráfico y de la barra dentro de la fila
 HINT_DEFAULT = "Viendo el pedido más riesgoso de la lista (seleccioná otra fila para inspeccionar)"
 COPY_LABEL = "⧉ Copiar ID del pedido"
+DEFAULT_THEME = "light"
+# Qué ofrece el botón de la cabecera en cada modo: el modo al que se pasa.
+THEME_SWITCH = {"light": ("🌙 Oscuro", "Cambiar a modo oscuro"), "dark": ("☀️ Claro", "Cambiar a modo claro")}
 
 
 # ----------------------------------------------------------------------------- datos
@@ -86,6 +90,43 @@ def get_scored_orders() -> pd.DataFrame:
     return orders_with_risk(get_artifact(), get_orders())
 
 
+# ----------------------------------------------------------------------------- tema
+
+
+def palette() -> dict:
+    return PALETTES[st.session_state.get("theme_mode", DEFAULT_THEME)]
+
+
+def _toggle_theme() -> None:
+    st.session_state.theme_mode = "dark" if st.session_state.theme_mode == "light" else "light"
+
+
+def sync_streamlit_theme(mode: str) -> bool:
+    """Lleva el tema nativo de Streamlit (grilla, inputs, botones, expander) al modo elegido.
+
+    Las opciones `theme.*` viajan al navegador al inicio de cada corrida, así que
+    cuando cambian hace falta una corrida más. Devuelve si cambió algo.
+    """
+    changed = False
+    for option, value in PALETTES[mode]["streamlit"].items():
+        if st._config.get_option(f"theme.{option}") != value:
+            st._config.set_option(f"theme.{option}", value)
+            changed = True
+    return changed
+
+
+def apply_theme() -> None:
+    """Aplica el modo de la sesión. Las opciones `theme.*` son del servidor (compartidas entre
+    pestañas), así que cada corrida las vuelve a alinear con la sesión y, si cambiaron, corre
+    una vez más para que el navegador reciba el tema nuevo; nunca dos veces seguidas."""
+    mode = st.session_state.setdefault("theme_mode", DEFAULT_THEME)
+    changed = sync_streamlit_theme(mode)
+    if changed and not st.session_state.get("theme_rerun_pending"):
+        st.session_state["theme_rerun_pending"] = True
+        st.rerun()
+    st.session_state["theme_rerun_pending"] = False
+
+
 # ----------------------------------------------------------------------------- filtros
 
 
@@ -104,12 +145,18 @@ def _seed() -> dict:
 
 
 def show_header() -> None:
-    st.markdown(CSS, unsafe_allow_html=True)
-    st.markdown(
-        '<div class="dc-header"><div class="dc-logo">DataCraft<span>.</span></div>'
-        '<div class="dc-sub">Riesgo de retraso por pedido · Olist</div></div>',
-        unsafe_allow_html=True,
-    )
+    """Marca a la izquierda y, en la misma barra, el botón de modo claro / oscuro."""
+    p = palette()
+    st.markdown(build_css(p), unsafe_allow_html=True)
+    with st.container(key="dc-header"):
+        brand, switch = st.columns([6, 1.2], vertical_alignment="center")
+        brand.markdown(
+            '<div class="dc-brand"><div class="dc-logo">DataCraft<span>.</span></div>'
+            '<div class="dc-sub">Riesgo de retraso por pedido · Olist</div></div>',
+            unsafe_allow_html=True,
+        )
+        label, tip = THEME_SWITCH[p["name"]]
+        switch.button(label, key="theme_toggle", help=tip, on_click=_toggle_theme, width="stretch")
 
 
 def show_toolbar(scored: pd.DataFrame) -> tuple[pd.DataFrame, str, bool, tuple]:
@@ -161,6 +208,7 @@ def show_hero(summary: pd.DataFrame, n_orders: int) -> None:
 
 
 def show_level_cards(summary: pd.DataFrame) -> None:
+    colors = palette()["level"]
     for column, level in zip(st.columns(len(LEVELS)), LEVELS):
         row = summary.loc[level]
         title, action = LEVEL_INFO[level]
@@ -170,7 +218,7 @@ def show_level_cards(summary: pd.DataFrame) -> None:
             else ""
         )
         column.markdown(
-            f'<div class="dc-card" style="--lvl:{LEVEL_COLORS[level]}">'
+            f'<div class="dc-card" style="--lvl:{colors[level]}">'
             f'<div class="t">{SEMAFORO[level]} {title}</div>'
             f'<div class="n">{format_int(row["pedidos"])}</div>'
             f'<div class="p">{format_pct(row["pct_pedidos"])} de los pedidos{late}</div>'
@@ -207,6 +255,7 @@ def show_lift(summary: pd.DataFrame) -> None:
 
 
 def _share_chart(summary: pd.DataFrame) -> alt.LayerChart:
+    p = palette()
     rows = [
         {"grupo": group, "nivel": LEVEL_INFO[level][0], "orden": i, "parte": summary.loc[level, column]}
         for group, column in [("Pedidos", "pct_pedidos"), ("Retrasos", "pct_retrasos")]
@@ -218,18 +267,18 @@ def _share_chart(summary: pd.DataFrame) -> alt.LayerChart:
     data["etiqueta"] = data["parte"].map(format_pct)
     color = alt.Color(
         "nivel:N",
-        scale=alt.Scale(domain=[LEVEL_INFO[l][0] for l in LEVELS], range=[LEVEL_COLORS[l] for l in LEVELS]),
-        legend=alt.Legend(title=None, orient="top", labelColor=NAVY, labelFontSize=13),
+        scale=alt.Scale(domain=[LEVEL_INFO[l][0] for l in LEVELS], range=[p["level"][l] for l in LEVELS]),
+        legend=alt.Legend(title=None, orient="top", labelColor=p["text"], labelFontSize=13),
     )
     y = alt.Y(
         "grupo:N",
         title=None,
         sort=["Pedidos", "Retrasos"],
-        axis=alt.Axis(labelColor=NAVY, labelFontSize=13, domain=False, ticks=False, labelPadding=8),
+        axis=alt.Axis(labelColor=p["text"], labelFontSize=13, domain=False, ticks=False, labelPadding=8),
     )
     x = alt.X("inicio:Q", title=None, axis=None, scale=alt.Scale(domain=[0, 1]))
     base = alt.Chart(data).encode(y=y)
-    bars = base.mark_bar(size=CHART_BAR, stroke=CREAM, strokeWidth=2, cornerRadius=4).encode(
+    bars = base.mark_bar(size=CHART_BAR, stroke=p["bg"], strokeWidth=2, cornerRadius=4).encode(
         x=x,
         x2="fin:Q",
         color=color,
@@ -241,7 +290,7 @@ def _share_chart(summary: pd.DataFrame) -> alt.LayerChart:
     )
     labels = (
         base.transform_filter(alt.datum.orden == 0)
-        .mark_text(align="left", dx=8, color=WHITE, fontWeight="bold", fontSize=13)
+        .mark_text(align="left", dx=8, color=p["on_bar"], fontWeight="bold", fontSize=13)
         .encode(x=x, text="etiqueta:N")
     )
     # Línea punteada que une el final de la parte roja de una barra con el de la otra, cruzando
@@ -252,7 +301,7 @@ def _share_chart(summary: pd.DataFrame) -> alt.LayerChart:
     link = pd.DataFrame({"x": [high["pct_pedidos"]], "x2": [high["pct_retrasos"]]})
     connector = (
         alt.Chart(link)
-        .mark_rule(color=LEVEL_COLORS["alto"], strokeDash=[4, 3], strokeWidth=1.5)
+        .mark_rule(color=p["level"]["alto"], strokeDash=[4, 3], strokeWidth=1.5)
         .encode(
             x=alt.X("x:Q", scale=alt.Scale(domain=[0, 1])),
             x2="x2:Q",
@@ -260,7 +309,8 @@ def _share_chart(summary: pd.DataFrame) -> alt.LayerChart:
             y2=alt.value(CHART_STEP + gap),
         )
     )
-    return (bars + labels + connector).properties(height=alt.Step(CHART_STEP)).configure_view(stroke=None)
+    chart = (bars + labels + connector).properties(height=alt.Step(CHART_STEP), background="transparent")
+    return chart.configure_view(stroke=None)
 
 
 # ----------------------------------------------------------------------------- tabla
@@ -305,6 +355,24 @@ def show_table_bar(
     return listed, view
 
 
+# Anchos en píxeles para que las diez columnas entren sin desplazamiento horizontal
+# en una pantalla común (el código completo del pedido sigue en los datos y en el inspector).
+TABLE_COLUMNS = {
+    "Nivel": st.column_config.TextColumn(width=70),
+    "Puntaje": st.column_config.ProgressColumn(
+        format="%d", min_value=0, max_value=SCORE_SCALE, width=76, help="De 0 a 100. Sirve para ordenar: más alto, más riesgo."
+    ),
+    "¿Se retrasó?": st.column_config.TextColumn(width=80),
+    "Pedido": st.column_config.TextColumn(width=112, help="Código completo del pedido (se ve entero en el inspector)"),
+    "Aprobado": st.column_config.DatetimeColumn(format="DD/MM/YY HH:mm", width=94),
+    "Estado": st.column_config.TextColumn(width=52),
+    "Plazo": st.column_config.NumberColumn(format="%d días", width=60),
+    "Distancia": st.column_config.NumberColumn(format="%d km", width=72),
+    "Precio": st.column_config.NumberColumn(format="R$ %.0f", width=64),
+    "Flete": st.column_config.NumberColumn(format="R$ %.0f", width=60),
+}
+
+
 def show_table(listed: pd.DataFrame, view: pd.DataFrame) -> tuple[str, int | None]:
     """Tabla seleccionable. Devuelve el pedido a inspeccionar y la fila marcada (None si no hay)."""
     event = st.dataframe(
@@ -314,23 +382,7 @@ def show_table(listed: pd.DataFrame, view: pd.DataFrame) -> tuple[str, int | Non
         height=TABLE_HEIGHT,
         on_select="rerun",
         selection_mode="single-row",
-        column_config={
-            "Nivel": st.column_config.TextColumn(width="small"),
-            "Puntaje": st.column_config.ProgressColumn(
-                format="%d",
-                min_value=0,
-                max_value=SCORE_SCALE,
-                width="small",
-                help="De 0 a 100. Sirve para ordenar: más alto, más riesgo.",
-            ),
-            "Pedido": st.column_config.TextColumn(width="medium", help="Código completo del pedido"),
-            "Aprobado": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
-            "Estado": st.column_config.TextColumn(width="small"),
-            "Plazo": st.column_config.NumberColumn(format="%d días"),
-            "Distancia": st.column_config.NumberColumn(format="%d km"),
-            "Precio": st.column_config.NumberColumn(format="R$ %.2f"),
-            "Flete": st.column_config.NumberColumn(format="R$ %.2f"),
-        },
+        column_config=TABLE_COLUMNS,
     )
     rows = event.selection.rows
     picked = rows[0] if rows and rows[0] < len(view) else None
@@ -378,17 +430,18 @@ def show_empty_state(scored: pd.DataFrame, search: str, full_period: tuple) -> N
 
 
 def show_detail(order_id: str, scored: pd.DataFrame, orders: pd.DataFrame, picked: int | None) -> None:
+    p = palette()
     order = scored.loc[scored["order_id"] == order_id].iloc[0]
     level = order["nivel_riesgo"]
     title, action = LEVEL_INFO[level]
-    palette = f"--lvl:{LEVEL_COLORS[level]};--soft:{LEVEL_SOFT[level]};--ink:{LEVEL_TEXT[level]}"
+    colors = f'--lvl:{p["level"][level]};--soft:{p["level_soft"][level]};--ink:{p["level_text"][level]}'
     hint = HINT_DEFAULT if picked is None else f"Fila {picked + 1} seleccionada en la tabla"
     with st.container(key="dc-inspector"):
         st.markdown(
             '<div class="dc-eyebrow">Inspector de pedido</div>'
             f'<div class="dc-hint{"" if picked is None else " picked"}">{hint}</div>'
             f'<div class="dc-oid">{escape(order_id)}</div>'
-            f'<div class="dc-level" style="{palette}"><span class="dc-badge">{SEMAFORO[level]} {title}</span>'
+            f'<div class="dc-level" style="{colors}"><span class="dc-badge">{SEMAFORO[level]} {title}</span>'
             f'<span class="dc-score">Puntaje <b>{round(order["prob_retraso"] * SCORE_SCALE)}</b>/{SCORE_SCALE}</span></div>',
             unsafe_allow_html=True,
         )
@@ -409,7 +462,7 @@ def show_detail(order_id: str, scored: pd.DataFrame, orders: pd.DataFrame, picke
             _factor_block("Lo que juega a favor", "Baja el riesgo", down, "down")
         st.markdown(
             '<div class="dc-fx-note">Comparado con el pedido promedio del período.</div>'
-            f'<div class="dc-action" style="{palette}"><div class="k">Acción sugerida</div>'
+            f'<div class="dc-action" style="{colors}"><div class="k">Acción sugerida</div>'
             f'<div class="t">{SEMAFORO[level]} {action}</div></div>',
             unsafe_allow_html=True,
         )
@@ -435,15 +488,16 @@ def _factor_block(title: str, meaning: str, factors: pd.DataFrame, kind: str) ->
 
 def _copy_button(order_id: str) -> None:
     """Botón secundario que copia el código al portapapeles (JS, en un iframe propio)."""
+    p = palette()
     st.iframe(
         f"""
 <style>
   body {{ margin: 0; padding-top: 6px; font-family: "Source Sans Pro", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif; }}
-  button {{ width: 100%; height: 38px; border-radius: 8px; border: 1px solid {NAVY}; background: {WHITE}; color: {NAVY};
-    font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s ease, transform .1s ease; }}
-  button:hover {{ background: {CREAM}; }}
+  button {{ width: 100%; height: 38px; border-radius: 8px; border: 1px solid {p["muted"]}; background: {p["surface"]};
+    color: {p["text"]}; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s ease, transform .1s ease; }}
+  button:hover {{ background: {p["hint_bg"]}; border-color: {p["text"]}; }}
   button:active {{ transform: scale(.985); }}
-  button.ok {{ background: {LEVEL_SOFT["bajo"]}; border-color: {LEVEL_COLORS["bajo"]}; color: {LEVEL_TEXT["bajo"]}; }}
+  button.ok {{ background: {p["level_soft"]["bajo"]}; border-color: {p["level"]["bajo"]}; color: {p["level_text"]["bajo"]}; }}
 </style>
 <button id="copy" type="button">{COPY_LABEL}</button>
 <script>
@@ -494,6 +548,7 @@ def show_help() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Riesgo de retraso · DataCraft", page_icon="🚚", layout="wide")
+    apply_theme()
     show_header()
     try:
         orders, scored = get_orders(), get_scored_orders()
@@ -513,7 +568,7 @@ def main() -> None:
     if listed.empty:
         show_empty_state(scored, search, full_period)
     else:
-        table_col, detail_col = st.columns([2.5, 1], gap="medium")
+        table_col, detail_col = st.columns([2.6, 1], gap="small")
         with table_col:
             order_id, picked = show_table(listed, view)
         with detail_col:
