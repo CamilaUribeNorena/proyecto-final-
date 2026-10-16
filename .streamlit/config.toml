@@ -1,0 +1,14 @@
+# Tema de la app con los colores de DataCraft: azul marino, crema y naranja.
+[theme]
+base = "light"
+primaryColor = "#B4541A"
+backgroundColor = "#FBF8F2"
+secondaryBackgroundColor = "#F1EADC"
+textColor = "#13294B"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
