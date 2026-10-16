@@ -143,6 +143,7 @@ También se revisará la calibración antes de interpretar los valores estimados
 | Baseline | [`src/baseline.py`](src/baseline.py) · [`docs/decisiones_baseline.md`](docs/decisiones_baseline.md) |
 | Features, comparación de modelos y modelo principal | [`src/feature_engineering.py`](src/feature_engineering.py) · [`src/training.py`](src/training.py) · [`docs/decisiones_modelos.md`](docs/decisiones_modelos.md) |
 | Calibración y niveles de riesgo | [`src/calibration.py`](src/calibration.py) · [`src/umbral.py`](src/umbral.py) |
+| App de riesgo por pedido (esqueleto) | [`app/streamlit_app.py`](app/streamlit_app.py) · [`app/riesgo.py`](app/riesgo.py) |
 | Esquema estrella para Power BI | [`scripts/unificacion/`](scripts/unificacion/) |
 | Tests (anti-fuga, target, calibración) | [`tests/`](tests/) |
 
@@ -200,6 +201,12 @@ python -m pytest
 
 # 5. Entrenar y comparar modelos (escribe reports/comparacion_modelos.json)
 python -m src.training
+
+# 6. Calibrar y guardar el modelo final (models/modelo_principal_calibrado.joblib)
+python -m src.umbral
+
+# 7. Abrir la app de riesgo por pedido
+streamlit run app/streamlit_app.py
 ```
 
 Los notebooks se abren con Jupyter desde la raíz del repo (`jupyter notebook`) o desde Visual Studio Code.
