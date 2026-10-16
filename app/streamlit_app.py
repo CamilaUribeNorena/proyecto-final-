@@ -230,7 +230,8 @@ def table_view(orders: pd.DataFrame, show_real: bool) -> pd.DataFrame:
         }
     )
     if show_real and TARGET_COL in orders.columns:
-        view["¿Se retrasó?"] = orders[TARGET_COL].map({1: "Sí", 0: "No"})
+        # Al lado del nivel, para que se vea sin desplazar la tabla.
+        view.insert(1, "¿Se retrasó?", orders[TARGET_COL].map({1: "Sí", 0: "No"}).to_numpy())
     return view
 
 
@@ -256,10 +257,11 @@ def show_table(orders: pd.DataFrame, show_real: bool):
         },
     )
     left, right = st.columns([3, 1], vertical_alignment="center")
-    left.caption(
-        f"{_int(len(view))} pedidos, del más riesgoso al menos riesgoso. "
-        "Marcá la casilla de una fila para ver su detalle a la derecha."
-    )
+    note = f"{_int(len(view))} pedidos, del más riesgoso al menos riesgoso. "
+    if "¿Se retrasó?" in view.columns:
+        late = view["¿Se retrasó?"] == "Sí"
+        note += f"Se retrasaron {_int(late.sum())} ({_pct(late.mean())}). "
+    left.caption(note + "Marcá la casilla de una fila para ver su detalle a la derecha.")
     right.download_button(
         "Descargar lista (CSV)",
         view.to_csv(index=False).encode("utf-8-sig"),
