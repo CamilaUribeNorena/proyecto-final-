@@ -41,6 +41,7 @@ from app.vista import (  # noqa: E402
     format_int,
     format_pct,
     impact_weights,
+    late_summary,
     lift_high,
     order_exists,
     plural,
@@ -387,7 +388,7 @@ def show_table(listed: pd.DataFrame, view: pd.DataFrame) -> tuple[str, int | Non
     rows = event.selection.rows
     picked = rows[0] if rows and rows[0] < len(view) else None
     st.caption(
-        f"{plural(len(view), 'pedido')}, del más riesgoso al menos riesgoso. "
+        f"{plural(len(view), 'pedido')}, del más riesgoso al menos riesgoso. {late_summary(view)}"
         "Marcá la casilla al inicio de una fila para inspeccionarla a la derecha."
     )
     return listed["order_id"].iloc[picked if picked is not None else 0], picked

@@ -66,6 +66,14 @@ def table_view(orders: pd.DataFrame, show_real: bool) -> pd.DataFrame:
     return view
 
 
+def late_summary(view: pd.DataFrame) -> str:
+    """'Se retrasaron 142 (7,6 %). ' cuando la tabla muestra el dato real; vacío si no."""
+    if "¿Se retrasó?" not in view.columns or view.empty:
+        return ""
+    late = view["¿Se retrasó?"] == "Sí"
+    return f"Se retrasaron {format_int(late.sum())} ({format_pct(late.mean())}). "
+
+
 def lift_high(summary: pd.DataFrame) -> float | None:
     """Cuántas veces más retrasos concentra el nivel alto que pedidos (2,2× = el doble y pico)."""
     if "pct_retrasos" not in summary.columns:

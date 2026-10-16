@@ -7,6 +7,7 @@ from app.vista import (
     filter_orders,
     format_factor,
     impact_weights,
+    late_summary,
     lift_high,
     order_exists,
     plural,
@@ -58,6 +59,12 @@ def test_table_view_scores_from_0_to_100_and_shows_real_delay_on_demand(scored):
     assert list(view["Puntaje"]) == [62, 35, 8, 5]
     assert "¿Se retrasó?" not in view.columns
     assert list(table_view(scored, show_real=True)["¿Se retrasó?"]) == ["Sí", "No", "No", "No"]
+
+
+def test_late_summary_counts_real_delays_only_when_shown(scored):
+    assert late_summary(table_view(scored, show_real=True)) == "Se retrasaron 1 (25,0 %). "
+    assert late_summary(table_view(scored, show_real=False)) == ""
+    assert late_summary(table_view(scored.iloc[:0], show_real=True)) == ""
 
 
 def test_counts_are_written_with_thousands_dot_and_plural():
