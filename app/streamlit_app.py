@@ -41,9 +41,11 @@ from app.vista import (  # noqa: E402
     format_factor,
     format_int,
     format_pct,
+    headline,
     impact_weights,
     late_summary,
     lift_high,
+    one_in,
     order_exists,
     plural,
     table_height,
@@ -208,18 +210,15 @@ def show_toolbar(scored: pd.DataFrame) -> tuple[pd.DataFrame, str, bool, tuple]:
 
 
 def show_hero(summary: pd.DataFrame, n_orders: int) -> None:
-    high = summary.loc["alto"]
-    if "pct_retrasos" in summary.columns and n_orders:
-        text = (
-            f"Revisando el <b>{format_pct(high['pct_pedidos'])}</b> de los pedidos (nivel alto) "
-            f"se encuentra el <b>{format_pct(high['pct_retrasos'])}</b> de los retrasos."
-        )
+    sentences = headline(summary) if n_orders else None
+    if sentences:
+        text, detail = sentences
     else:
-        text = f"Hay <b>{format_int(high['pedidos'])}</b> pedidos en riesgo alto para revisar."
+        high = summary.loc["alto"]
+        text, detail = f"Hay <b>{format_int(high['pedidos'])}</b> pedidos en riesgo alto para revisar.", ""
     st.markdown(f'<p class="dc-hero">{text}</p>', unsafe_allow_html=True)
     st.markdown(
-        f'<p class="dc-muted">{format_int(n_orders)} pedidos en el período elegido. '
-        "El nivel ordena los pedidos por riesgo para decidir por dónde empezar.</p>",
+        f'<p class="dc-muted">{detail} {format_int(n_orders)} pedidos en el período elegido.</p>',
         unsafe_allow_html=True,
     )
 
@@ -264,9 +263,9 @@ def show_lift(summary: pd.DataFrame) -> None:
     high = summary.loc["alto"]
     st.markdown(
         f'<div class="dc-lift"><div class="n">{format_factor(lift)}</div>'
-        '<div class="t">más concentración de retrasos en el nivel alto</div>'
-        f'<div class="s">{SEMAFORO["alto"]} El {format_pct(high["pct_pedidos"])} de los pedidos junta '
-        f'el {format_pct(high["pct_retrasos"])} de los retrasos.</div></div>',
+        '<div class="t">más retrasos que revisando al azar</div>'
+        f'<div class="s">{SEMAFORO["alto"]} Revisando {one_in(high["pct_pedidos"])} pedidos (los rojos) '
+        f'aparece {one_in(high["pct_retrasos"])} de todos los pedidos que se retrasaron.</div></div>',
         unsafe_allow_html=True,
     )
 
